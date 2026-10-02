@@ -181,6 +181,9 @@ export class Enemy {
     if (info.dir) this.vel.addScaledVector(info.dir, 4);
     this.scene?.onPerpDown(this);
     fx.text(this.pos.clone().setY(this.pos.y + 2.4), 'SUBDUED', 'good');
+    const c = this.centre().clone(); fx.spark(c, 26, 0x80d0ff, 12, 0.6); fx.flash(c, 0x80c0ff, 3, 0.2, 14);
+    fx.ring(this.pos.clone().setY(0.2), 0x80d0ff, 5, 0.4);
+    this.zapT = 0.9;
   }
   die(info = {}) {
     this.releaseToken();
@@ -201,6 +204,7 @@ export class Enemy {
     this.stateT += dt;
     this.cool -= dt;
     this.walking = 0;
+    if (this.zapT > 0) { this.zapT -= dt; const c = this.centre(); if (Math.random() < 0.6) fx.spark(_v.set(c.x + rand(-0.5, 0.5), this.pos.y + rand(0.2, 1.2), c.z + rand(-0.5, 0.5)), 3, 0x9fe0ff, 5, 0.25); }
     if (this.burn > 0) { this.burn -= dt; fx.fire(this.pos.clone().setY(this.pos.y + 0.8), 1, 0.5); if (this.state !== 'stagger') this.hp -= 0; }
     // velocity (knockback) integration
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt; this.vel.multiplyScalar(Math.exp(-7 * dt));

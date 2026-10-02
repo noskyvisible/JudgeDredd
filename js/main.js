@@ -88,7 +88,7 @@ const player = new Player(scene);
 G.player = player;
 player.pos.copy(world.spawnPos); player.yaw = Math.PI; player.camYaw = Math.PI;
 const bike = new Lawmaster(scene);
-bike.place(world.spawnPos.x + 5, world.spawnPos.z + 6, 0);
+bike.place(world.spawnPos.x + 2.6, world.spawnPos.z + 3, 0);
 G.bikeObj = bike;
 G.civs.init();
 G.traffic.init(34);
@@ -133,6 +133,10 @@ function startGame() {
   audio.init(); G.started = true; G.paused = false; titleEl.classList.add('hidden'); hud.show(true);
   input.lock();
   G.crimes.dispatch('brawl');
+  const tips = [[2500, 'Follow the gold marker to the crime scene — TAB cycles crimes'], [6000, 'Walk to the Lawmaster and press E to mount it'],
+    [10000, 'On the bike: G = autopilot · SHIFT = boost · SPACE = drift · H = siren'], [16000, 'LMB = daystick combo · F = counter red-flash attacks · RMB = aim Lawgiver'],
+    [22000, 'Subdued perps? Walk up and press E to judge them']];
+  for (const [t, s] of tips) setTimeout(() => { if (G.started && !G.dead) hud.feed(s, 'dispatch'); }, t);
   setTimeout(() => { hud.banner('JUDGE DREDD', 'The streets are waiting', 'dispatch'); audio.voice('I am the law.'); }, 400);
 }
 startBtn.disabled = false; startBtn.textContent = 'ENTER THE STREETS';
@@ -151,7 +155,7 @@ G.onPlayerDeath = () => { G.dead = true; hud.showDeath(true); audio.voice('Judge
 G.onRespawnReady = () => {
   G.dead = false; hud.showDeath(false); player.addCred(-Math.floor(player.cred * 0.1), 'MEDICAL LEAVE'); player.respawn();
   for (const e of G.enemies.all) { e.aggro = false; if (e.state === 'engage' || e.state === 'telegraph') e.setState('idle'); }
-  bike.place(world.spawnPos.x + 5, world.spawnPos.z + 6, 0); setPaused(true);
+  bike.place(world.spawnPos.x + 2.6, world.spawnPos.z + 3, 0); setPaused(true);
 };
 window.addEventListener('keydown', (e) => { if (judgement.key(e)) { e.preventDefault(); } });
 G.voiceOn = true;

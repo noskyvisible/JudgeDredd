@@ -189,7 +189,8 @@ class CrimeScene {
       if (!this.bombStarted && d < 90) { this.bombStarted = true; G.hud?.banner('BOMB ARMED', 'Defuse before it detonates', 'bad'); audio.ui('error'); }
       if (this.bombStarted) {
         b.timer -= dt;
-        const rate = b.timer < 15 ? 8 : 3; b.lamp.material.color.setRGB(Math.sin(G.time * rate * 2) > 0 ? 4 : 0.3, 0.1, 0.1);
+        const rate = b.timer < 15 ? 8 : 3; const lit = Math.sin(G.time * rate * 2) > 0; b.lamp.material.color.setRGB(lit ? 4 : 0.3, 0.1, 0.1);
+        if (lit && d < 120 && Math.random() < 0.3) fx.glowPuff(b.pos.clone().setY(1.0), 0xff2020, 3.2, 0.12);
         if (Math.floor(b.timer * 2) !== Math.floor((b.timer + dt) * 2)) audio.ui('tick');
         if (b.timer <= 0) this.explodeBomb();
       }

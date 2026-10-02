@@ -42,7 +42,7 @@ Use a desktop browser with WebGL2 (Chrome / Edge / Firefox). Click **Enter the s
 | `Tab` | cycle tracked crime | cycle tracked crime |
 | `M` | city map | city map |
 | `P` / `Esc` | pause | pause |
-| `V` / `N` | toggle Dredd's voice / music | |
+| `V` / `N` / `O` / `F3` | toggle voice · music · graphics quality · FPS counter | |
 
 ## The loop
 
