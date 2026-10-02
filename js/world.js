@@ -266,6 +266,8 @@ export const world = {
     const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15) });
     this.signMat = signMat;
     const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+    const shopMat = new THREE.MeshBasicMaterial({ map: TX.makeShopTex(), vertexColors: true, toneMapped: false });
+    const shopG = [];
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.5, metalness: 0.8 });
 
     // ===== accumulators =====
@@ -275,6 +277,8 @@ export const world = {
     const metalG = [];
     const glow = []; // {x,y,z,r,g,b,size,blink}
     const lampPos = [];
+    const smears = [], neonSrc = [];
+    const col3 = (hex) => new THREE.Color(hex);
     const edgeH = {}; // `${i},${j},${side}` -> min building height along edge
     const tint = new THREE.Color();
 
@@ -302,6 +306,21 @@ export const world = {
       tint.set(color).multiplyScalar(k); colorize(g, tint); neonG.push(g);
     };
     const metalBox = (x, y, z, w, h, d) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); tint.setScalar(1); colorize(g, tint); metalG.push(g); };
+    const darkBox = (x, y, z, w, h, d, shade = 0.5, rx = 0) => { const g = new THREE.BoxGeometry(w, h, d); if (rx) g.rotateX(rx); g.translate(x, y, z); tint.setScalar(shade); colorize(g, tint); metalG.push(g); };
+    const cylBox = (x, y, z, rt, rb, h, shade = 0.6, seg = 10) => { const g = new THREE.CylinderGeometry(rt, rb, h, seg); g.translate(x, y, z); tint.setScalar(shade); colorize(g, tint); metalG.push(g); };
+    // rooftop clutter: AC units, stacks, water tanks, dishes
+    const roofProps = (cx, cz, w, d, top) => {
+      const n = RI(1, 4);
+      for (let q = 0; q < n; q++) {
+        const px = cx + R(-0.36, 0.36) * w, pz = cz + R(-0.36, 0.36) * d, k = R();
+        if (k < 0.34) { const aw = R(2, 4.5), ad = R(2, 4); darkBox(px, top + 0.9, pz, aw, 1.8, ad, R(0.45, 0.8)); darkBox(px, top + 1.85, pz, aw * 0.8, 0.12, ad * 0.8, 0.95); }
+        else if (k < 0.58) { cylBox(px, top + 2.5, pz, R(0.35, 0.8), R(0.45, 0.9), R(3, 6), 0.55, 8); }
+        else if (k < 0.82) {
+          cylBox(px, top + 3.4, pz, 1.6, 1.6, 2.6, 0.6, 14); cylBox(px, top + 5.1, pz, 0.1, 1.7, 0.9, 0.5, 14);
+          for (const [lx, lz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) darkBox(px + lx * 1.2, top + 1.0, pz + lz * 1.2, 0.2, 2.0, 0.2, 0.4);
+        } else { cylBox(px, top + 1.2, pz, 0.12, 0.12, 2.4, 0.5, 6); cylBox(px, top + 2.6, pz, 1.2, 0.1, 0.45, 0.8, 14); }
+      }
+    };
     const signQuad = (x, y, z, w, h, ry, idx) => {
       const g = new THREE.PlaneGeometry(w, h);
       const uv = g.attributes.uv;
@@ -370,6 +389,19 @@ export const world = {
         glow.push({ x: tcx, y: top + ah + 0.5, z: tcz, c: [1.0, 0.1, 0.1], s: 7, blink: 1 });
         for (let q = 0; q < 2; q++) metalBox(tcx + R(-1, 1) * tw * 0.3, top + 1.2, tcz + R(-1, 1) * td * 0.3, R(2, 5), 2.4, R(2, 5));
       }
+      // cornice + roof clutter
+      if (h > 14) { darkBox(cx, h - 0.35, cz, w + 0.9, 0.7, d + 0.9, 0.55); darkBox(cx, h + 0.15, cz, w + 0.4, 0.3, d + 0.4, 0.35); }
+      roofProps(tcx, tcz, tw, td, top);
+      // pilasters on big towers
+      if (h > 70 && w > 28) {
+        for (const [nx, nz, len, sx, sz] of [[0, 1, w, cx, cz + d / 2], [0, -1, w, cx, cz - d / 2], [1, 0, d, cx + w / 2, cz], [-1, 0, d, cx - w / 2, cz]]) {
+          const n = Math.floor(len / 13);
+          for (let q = 0; q < n; q++) {
+            const o = -len / 2 + (q + 0.5) * (len / n);
+            darkBox(sx + nx * 0.4 + (nz !== 0 ? o : 0), h / 2, sz + nz * 0.4 + (nx !== 0 ? o : 0), nx !== 0 ? 0.8 : 1.0, h, nz !== 0 ? 0.8 : 1.0, 0.5);
+          }
+        }
+      }
       // vertical neon edges on tall towers
       if (h > 60 && chance(0.6)) {
         const col = RP(this.palette(cx, cz)); const hh = h * R(0.4, 0.95);
@@ -389,6 +421,32 @@ export const world = {
         signQuad(pos[0], sy, pos[1], sw, sh, ry, idx);
         glow.push({ x: pos[0] + nx * 2, y: sy, z: pos[1] + nz * 2, c: [0.6, 0.5, 0.6], s: sw * 0.9, blink: 0, a: 0.1 });
 
+      }
+      // ground-floor shopfronts with awnings, signs and blade signs on street-facing walls
+      if (h > 10) for (const [nx, nz, len, sx, sz, ry] of sides) {
+        const edgeD = nx !== 0 ? Math.abs(sx - (blockC(i) + Math.sign(nx) * BLOCK / 2)) : Math.abs(sz - (blockC(j) + Math.sign(nz) * BLOCK / 2));
+        if (edgeD > 7) continue;
+        const ax = nx !== 0 ? 0 : 1, az = nx !== 0 ? 1 : 0, pal = this.palette(cx, cz);
+        let t = -len / 2 + R(1.5, 3);
+        while (t < len / 2 - 5) {
+          const bw = R(4, 8.5); if (t + bw > len / 2 - 1.5) break;
+          const mid = t + bw / 2, col = RP(pal);
+          const px = sx + ax * mid, pz = sz + az * mid;
+          const gw = nx !== 0 ? 0.3 : bw, gd = nx !== 0 ? bw : 0.3;
+          { const g = new THREE.BoxGeometry(gw, 3.0, gd); g.translate(px + nx * 0.25, 1.85, pz + nz * 0.25); if (nx !== 0) g.rotateY(0); tint.set(col).multiplyScalar(1.35); colorize(g, tint); shopG.push(g); }   // lit shop interior
+          for (const s2 of [-1, 1]) darkBox(px + nx * 0.3 + ax * s2 * bw / 2, 1.85, pz + nz * 0.3 + az * s2 * bw / 2, nx !== 0 ? 0.5 : 0.35, 3.3, nz !== 0 ? 0.5 : 0.35, 0.3);
+          darkBox(px + nx * 0.85, 3.65, pz + nz * 0.85, nx !== 0 ? 1.5 : bw + 0.8, 0.18, nz !== 0 ? 1.5 : bw + 0.8, 0.35);   // awning
+          neonBox(px + nx * 1.55, 3.57, pz + nz * 1.55, nx !== 0 ? 0.07 : bw + 0.8, 0.09, nz !== 0 ? 0.07 : bw + 0.8, col, 1.0);
+          if (chance(0.6)) signQuad(px + nx * 0.32, 4.85, pz + nz * 0.32, clamp(bw * 0.9, 3, 7), 1.7, ry, RI(0, TX.SIGN_COUNT - 1));
+          smears.push({ x: px + nx * 2.4, z: pz + nz * 2.4, c: col3(col), a: 0.55, w: bw * 0.42, l: 7 });
+          neonSrc.push({ x: px + nx * 2.0, y: 2.6, z: pz + nz * 2.0, c: col3(col) });
+          t += bw + R(0.8, 3.2);
+        }
+        if (chance(0.5)) { // blade sign
+          const col = RP(pal), along = R(-0.35, 0.35) * len, bx = sx + ax * along + nx * 1.0, bz = sz + az * along + nz * 1.0, by = R(6, 11);
+          darkBox(bx, by, bz, nx !== 0 ? 1.8 : 0.18, 3.6, nz !== 0 ? 1.8 : 0.18, 0.3);
+          for (const s2 of [-1, 1]) neonBox(bx + (nz !== 0 ? s2 * 0.12 : 0), by, bz + (nx !== 0 ? s2 * 0.12 : 0), nx !== 0 ? 1.4 : 0.05, 3.2, nz !== 0 ? 1.4 : 0.05, col, 1.2);
+        }
       }
       return top;
     };
@@ -521,7 +579,9 @@ export const world = {
       m4.makeTranslation(x, 0, z); lampPole.setMatrixAt(idx, m4); lampHead.setMatrixAt(idx, m4);
       glow.push({ x, y: 7.6, z, c: [1, 0.78, 0.5], s: 5, blink: 0, a: 0.4 });
       if (idx % 2 === 0) lampPos.push({ x, z, c: new THREE.Color(1, 0.7, 0.4), r: 14 });
+      smears.push({ x, z, c: new THREE.Color(1, 0.74, 0.42), a: 0.6, w: 0.9, l: 11 });
     });
+    this.lamps = lampMatrix.map(([x, z]) => ({ x, z }));
     scene.add(lampPole, lampHead);
 
     // ===== merge & add meshes =====
@@ -533,6 +593,7 @@ export const world = {
       const m = new THREE.Mesh(mergeGeometries(arr), facMats[v]); m.castShadow = true; m.receiveShadow = true; scene.add(m);
     });
     if (neonG.length) scene.add(new THREE.Mesh(mergeGeometries(neonG), neonMat));
+    if (shopG.length) scene.add(new THREE.Mesh(mergeGeometries(shopG), shopMat));
     if (metalG.length) { const m = new THREE.Mesh(mergeGeometries(metalG), new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x2a2d36, roughness: 0.5, metalness: 0.7 })); m.castShadow = true; m.receiveShadow = true; scene.add(m); }
     if (signG.length) { const m = new THREE.Mesh(mergeGeometries(signG), signMat); m.renderOrder = 5; scene.add(m); }
 
@@ -561,6 +622,13 @@ export const world = {
     this.buildGlow(scene, glow);
     // ===== light pool decals =====
     this.buildPools(scene, lampPos);
+    // ===== wet-road reflection smears, lamp cones, lamp lights, cables, searchlights =====
+    this.neonSrc = neonSrc;
+    this.buildSmears(scene, smears);
+    this.buildCones(scene);
+    this.buildLights(scene);
+    this.buildCables(scene, edgeH);
+    this.buildSearchlights(scene);
     // ===== rain =====
     this.buildRain(scene);
     // ===== flying traffic =====
@@ -639,6 +707,146 @@ export const world = {
     mesh.frustumCulled = false; mesh.renderOrder = 3; scene.add(mesh);
   },
 
+  buildSmears(scene, list) {
+    const n = list.length;
+    const base = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.setAttribute('position', base.attributes.position); geo.setAttribute('uv', base.attributes.uv);
+    const iPos = new Float32Array(n * 3), iCol = new Float32Array(n * 4), iSize = new Float32Array(n * 2);
+    list.forEach((s, i) => { iPos.set([s.x, 0, s.z], i * 3); iCol.set([s.c.r, s.c.g, s.c.b, s.a ?? 0.5], i * 4); iSize.set([s.w, s.l], i * 2); });
+    geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(iPos, 3)); geo.setAttribute('iCol', new THREE.InstancedBufferAttribute(iCol, 4)); geo.setAttribute('iSize', new THREE.InstancedBufferAttribute(iSize, 2));
+    geo.instanceCount = n;
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { time: this.timeU },
+      vertexShader: `attribute vec3 iPos; attribute vec4 iCol; attribute vec2 iSize; varying vec2 vUv; varying vec4 vCol;
+        void main(){
+          vec2 toCam = cameraPosition.xz - iPos.xz; float dist = length(toCam); vec2 dir = toCam / max(dist, 0.001); vec2 perp = vec2(-dir.y, dir.x);
+          float camH = max(cameraPosition.y, 1.2);
+          float lenM = iSize.y * clamp(dist / (camH * 6.0), 0.4, 1.7);
+          vec3 p = vec3(iPos.x, 0.05, iPos.z);
+          p.xz += perp * position.x * iSize.x + dir * (position.y + 0.5 - 0.1) * lenM;
+          vUv = uv; vCol = iCol; vCol.a *= smoothstep(280.0, 90.0, dist) * smoothstep(2.0, 10.0, dist);
+          gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: `varying vec2 vUv; varying vec4 vCol; uniform float time;
+        void main(){
+          float along = vUv.y, across = abs(vUv.x - 0.5) * 2.0;
+          float a = pow(1.0 - along, 2.2) * (1.0 - across * across);
+          a *= 0.7 + 0.3 * sin(along * 40.0 - time * 2.2 + vCol.r * 9.0);
+          gl_FragColor = vec4(vCol.rgb * 1.2, a * vCol.a);
+        }`,
+    });
+    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; scene.add(mesh);
+  },
+
+  // soft light cones under the streetlamps nearest the player: rain streaks glitter inside them
+  buildCones(scene) {
+    const H = 7.4;
+    const geo = new THREE.ConeGeometry(4.6, H, 18, 1, true).translate(0, H / 2, 0);   // apex up at the lamp head, base on the road
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { time: this.timeU },
+      vertexShader: `varying float vH; varying vec3 vW; varying vec3 vN; varying vec3 vV;
+        void main(){ vec4 wp = vec4(position, 1.0);
+          #ifdef USE_INSTANCING
+          wp = instanceMatrix * wp;
+          #endif
+          wp = modelMatrix * wp; vW = wp.xyz; vH = clamp(position.y / ${H.toFixed(1)}, 0.0, 1.0);
+          vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - wp.xyz);
+          gl_Position = projectionMatrix * viewMatrix * wp; }`,
+      fragmentShader: `varying float vH; varying vec3 vW; varying vec3 vN; varying vec3 vV; uniform float time;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        void main(){
+          float fres = pow(abs(dot(normalize(vN), normalize(vV))), 1.4);
+          float a = (0.12 + 0.88 * vH) * fres * 0.1;
+          float col = hash(floor(vW.xz * 9.0));
+          float streak = smoothstep(0.86, 1.0, col) * (0.5 + 0.5 * sin((vW.y + time * 13.0 * (0.6 + col)) * 2.6));
+          a *= 1.0 + streak * 3.2;
+          gl_FragColor = vec4(1.0, 0.8, 0.52, a);
+        }`,
+    });
+    this.cones = new THREE.InstancedMesh(geo, mat, 28); this.cones.frustumCulled = false; this.cones.renderOrder = 5; this.cones.count = 0; scene.add(this.cones);
+    this.coneT = 0;
+  },
+
+  // real (dynamic) lights hopped onto the streetlamps and neon shopfronts nearest the player
+  buildLights(scene) {
+    this.lampLights = []; this.neonLights = [];
+    for (let i = 0; i < 4; i++) { const l = new THREE.PointLight(0xffc88c, 0, 34, 2); l.userData = { cur: -1, tgt: -1, k: 0, peak: 260 }; scene.add(l); this.lampLights.push(l); }
+    for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(0xffffff, 0, 26, 2); l.userData = { cur: -1, tgt: -1, k: 0, peak: 150 }; scene.add(l); this.neonLights.push(l); }
+    this.lightT = 0; this._cand = [];
+  },
+  updateLights(dt, c) {
+    this.lightT -= dt;
+    const pick = (src, lights, maxD, label) => {
+      const cand = this._cand; cand.length = 0;
+      for (let i = 0; i < src.length; i++) { const s = src[i]; const dx = s.x - c.x, dz = s.z - c.z, d2 = dx * dx + dz * dz; if (d2 < maxD * maxD) cand.push([d2, i]); }
+      cand.sort((a, b) => a[0] - b[0]);
+      const want = cand.slice(0, lights.length).map((e) => e[1]);
+      for (const l of lights) if (l.userData.tgt >= 0 && !want.includes(l.userData.tgt)) l.userData.tgt = -1;   // drop lamps that fell out of range
+      for (const idx of want) { if (lights.some((l) => l.userData.tgt === idx)) continue; const free = lights.find((l) => l.userData.tgt === -1 && (l.userData.cur === -1 || l.userData.k <= 0.01)) || lights.find((l) => l.userData.tgt === -1); if (free) free.userData.tgt = idx; }
+    };
+    if (this.lightT <= 0) { this.lightT = 0.3; pick(this.lamps, this.lampLights, 60); pick(this.neonSrc, this.neonLights, 45); }
+    const step = (l, src, heightY, isNeon) => {
+      const u = l.userData;
+      if (u.tgt !== u.cur) { u.k -= dt * 7; if (u.k <= 0) { u.k = 0; u.cur = u.tgt; if (u.cur >= 0) { const s = src[u.cur]; l.position.set(s.x, isNeon ? s.y : heightY, s.z); if (isNeon) l.color.copy(s.c); } } }
+      else if (u.cur >= 0) u.k = Math.min(1, u.k + dt * 7);
+      l.intensity = u.cur >= 0 ? u.peak * u.k * (isNeon ? 1 : 1) : 0;
+    };
+    for (const l of this.lampLights) step(l, this.lamps, 7.4, false);
+    for (const l of this.neonLights) step(l, this.neonSrc, 0, true);
+    // cones
+    this.coneT -= dt;
+    if (this.coneT <= 0 && this.cones) {
+      this.coneT = 0.5;
+      const cand = this._cand; cand.length = 0;
+      for (let i = 0; i < this.lamps.length; i++) { const s = this.lamps[i]; const dx = s.x - c.x, dz = s.z - c.z, d2 = dx * dx + dz * dz; if (d2 < 70 * 70) cand.push([d2, i]); }
+      cand.sort((a, b) => a[0] - b[0]);
+      const m = new THREE.Matrix4(); const n = Math.min(28, cand.length);
+      for (let k = 0; k < n; k++) { const s = this.lamps[cand[k][1]]; m.makeTranslation(s.x, 0, s.z); this.cones.setMatrixAt(k, m); }
+      this.cones.count = n; this.cones.instanceMatrix.needsUpdate = true;
+    }
+  },
+
+  // power / phone cables sagging across the streets between tall facades
+  buildCables(scene, edgeH) {
+    const pts = []; const V = (x, y, z) => pts.push(x, y, z);
+    const seg = 12;
+    const cable = (x0, y0, z0, x1, y1, z1, sag) => {
+      for (let i = 0; i < seg; i++) {
+        const t0 = i / seg, t1 = (i + 1) / seg, s0 = 4 * t0 * (1 - t0) * sag, s1 = 4 * t1 * (1 - t1) * sag;
+        V(x0 + (x1 - x0) * t0, y0 + (y1 - y0) * t0 - s0, z0 + (z1 - z0) * t0); V(x0 + (x1 - x0) * t1, y0 + (y1 - y0) * t1 - s1, z0 + (z1 - z0) * t1);
+      }
+    };
+    for (let q = 0; q < 700; q++) {
+      const i = randInt(0, N - 2), j = randInt(0, N - 1), lim = Math.min(edgeH[`${i},${j}`] || 0, edgeH[`${i + 1},${j}`] || 0);
+      if (lim < 22) continue;
+      const k = i + 1, z = blockC(j) + rand(-30, 30), y = rand(12, Math.min(40, lim - 4));
+      cable(roadX(k) - ROAD / 2 - 4, y, z, roadX(k) + ROAD / 2 + 4, y + rand(-2, 2), z + rand(-3, 3), rand(0.8, 2.6));
+    }
+    for (let q = 0; q < 700; q++) {
+      const i = randInt(0, N - 1), j = randInt(0, N - 2), lim = Math.min(edgeH[`${i},${j}`] || 0, edgeH[`${i},${j + 1}`] || 0);
+      if (lim < 22) continue;
+      const k = j + 1, x = blockC(i) + rand(-30, 30), y = rand(12, Math.min(40, lim - 4));
+      cable(x, y, roadX(k) - ROAD / 2 - 4, x + rand(-3, 3), y + rand(-2, 2), roadX(k) + ROAD / 2 + 4, rand(0.8, 2.6));
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x06060a })); lines.frustumCulled = false; scene.add(lines);
+  },
+
+  // sweeping searchlights from the Hall of Justice
+  buildSearchlights(scene) {
+    const geo = new THREE.CylinderGeometry(14, 3, 520, 16, 1, true).translate(0, 260, 0);
+    const mat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+      vertexShader: 'varying float vH; varying vec3 vN; varying vec3 vV; void main(){ vH = position.y / 520.0; vec4 wp = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal); vV = normalize(cameraPosition - wp.xyz); gl_Position = projectionMatrix * viewMatrix * wp; }',
+      fragmentShader: 'varying float vH; varying vec3 vN; varying vec3 vV; void main(){ float f = pow(abs(dot(normalize(vN), normalize(vV))), 1.6); gl_FragColor = vec4(0.75, 0.85, 1.0, f * (1.0 - vH * 0.7) * 0.075); }',
+    });
+    this.searchlights = [];
+    const hall = this.hallPos;
+    for (const [dx, y, dz, ph] of [[-32, 38, -18, 0], [32, 38, -18, 2], [-14, 60, -12, 4], [14, 60, -12, 1]]) {
+      const m = new THREE.Mesh(geo, mat); m.position.set(hall.x + dx, y, hall.z + dz); m.frustumCulled = false; m.renderOrder = 6; scene.add(m); m.userData.ph = ph; this.searchlights.push(m);
+    }
+  },
+
   buildRain(scene) {
     // light drizzle: sparse, thin streaks that fade with distance; the density breathes slowly
     const n = 2600, size = 80;
@@ -694,6 +902,8 @@ export const world = {
     this.glowMat.uniforms.time.value = t;
     this.rainMat.uniforms.time.value = t;
     this.timeU.value = t;
+    this.updateLights(dt, center);
+    for (const s of this.searchlights) { s.rotation.y = t * 0.22 + s.userData.ph; s.rotation.z = 0.32 + 0.18 * Math.sin(t * 0.31 + s.userData.ph * 1.7); }
     this.rainMat.uniforms.cam.value.copy(G.camera.position);
     this.rainLevel = 0.3 + 0.2 * Math.sin(t * 0.045) + 0.12 * Math.sin(t * 0.13 + 1.7) + this.lightning * 0.25; this.rainMat.uniforms.level.value = clamp(this.rainLevel, 0.12, 0.75);
     this.sun.position.set(center.x - 50, 130, center.z - 30);

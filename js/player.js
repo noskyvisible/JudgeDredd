@@ -187,6 +187,7 @@ export class Player {
     const name = this.atkClip, A = ATK[name]; if (!A) return;
     const fwd = _f.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     let hits = 0;
+    const batonTip = this.baton.userData.inner.localToWorld(this.baton.userData.tipLocal.clone());
     const list = G.enemies.all.filter((e) => e.hostile && !e.removed && e.state !== 'dead' && e.state !== 'subdued' && e.state !== 'surrender');
     for (const e of list) {
       const dx = e.pos.x - this.pos.x, dz = e.pos.z - this.pos.z, d = Math.hypot(dx, dz);
@@ -200,14 +201,15 @@ export class Player {
       if (name === 'counter' || A.finisher) { if (e.state !== 'subdued' && e.state !== 'surrender' && !e.removed) e.knockdown({ dir, type: 'counter' }); }
       hits++;
       const p = e.centre().clone(); p.addScaledVector(dir, -0.4);
-      fx.impact(p, 14, 0xffe890); fx.spark(p, 8, 0x80d0ff, 12, 0.35);
+      fx.impact(p, 14, 0xffe890, dir.clone().negate()); fx.spark(p, 8, 0x80d0ff, 12, 0.35);
+      fx.arc(batonTip, p, 0xa8e4ff, 0.32, 0.11); fx.arcBurst(p, A.heavy ? 1.5 : 0.9, A.heavy ? 4 : 2, 0xa8e4ff, 0.1);
       fx.ring(p, 0xfff0a0, A.heavy ? 3.2 : 2, 0.22, G.camera.position.clone().sub(p).normalize());
       audio.baton(A.heavy, p);
       G.hud?.hitMarker(false);
       this.addCombo(A.finisher ? 3 : 1);
       if (this.combo >= 8 && !this.finisherReady && this.combo % 8 === 0) { this.finisherReady = true; G.hud?.banner('JUDGEMENT READY', 'Attack to unleash the finisher', 'good'); audio.ui('rank'); }
     }
-    if (hits) { fx.hitstop(A.heavy ? 0.1 : 0.05); fx.shake(A.heavy ? 0.7 : 0.25); if (A.finisher) { fx.ring(new THREE.Vector3(this.pos.x, 0.3, this.pos.z), 0xffd24a, 16, 0.6); fx.shake(1.4); fx.explosionLite?.(this.pos); } }
+    if (hits) { fx.hitstop(A.heavy ? 0.1 : 0.05); fx.shake(A.heavy ? 0.7 : 0.25); if (A.finisher) { const g0 = new THREE.Vector3(this.pos.x, 0.3, this.pos.z); fx.ring(g0, 0xffd24a, 16, 0.6); fx.ring(g0, 0xffffff, 9, 0.35); fx.shake(1.4); fx.arcBurst(g0.clone().setY(1.1), 4.5, 12, 0xffd890, 0.22); fx.spark(g0, 40, 0xffd24a, 20, 0.9); fx.decal(new THREE.Vector3(this.pos.x, 0.02, this.pos.z), new THREE.Vector3(0, 1, 0), 2, 6); fx.flash(g0.clone().setY(1.4), 0xffd890, 8, 0.25, 22); } }
     else { this.combo = this.combo; audio.whoosh(this.pos); }
     // tiny forward flash
     this.hitDone = true;

@@ -257,3 +257,28 @@ export function makeGlowTex() {
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   return canvasTex(c);
 }
+
+// ---------- shopfront interior (grey-scale, tinted per shop by vertex colour) ----------
+export function makeShopTex() {
+  const [c, x] = makeCanvas(512, 256);
+  const rng = mulberry32(77);
+  x.fillStyle = '#1a1a1c'; x.fillRect(0, 0, 512, 256);
+  // lit ceiling band + back wall glow
+  const g = x.createLinearGradient(0, 0, 0, 256); g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.18, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0.12)');
+  x.fillStyle = g; x.fillRect(8, 8, 496, 240);
+  // shelves with products
+  for (let row = 0; row < 3; row++) {
+    const y = 52 + row * 58;
+    x.fillStyle = 'rgba(0,0,0,0.65)'; x.fillRect(8, y + 40, 496, 6);
+    for (let px = 14; px < 500;) {
+      const w = 12 + rng() * 26, h = 14 + rng() * 34, l = 90 + rng() * 165;
+      x.fillStyle = `rgb(${l | 0},${l | 0},${l | 0})`; x.fillRect(px, y + 40 - h, w, h); px += w + 4 + rng() * 10;
+    }
+  }
+  // counter + silhouettes
+  x.fillStyle = 'rgba(0,0,0,0.8)'; x.fillRect(8, 206, 496, 42);
+  for (let i = 0; i < 3; i++) { if (rng() < 0.7) { const px = 40 + rng() * 420; x.fillStyle = 'rgba(0,0,0,0.85)'; x.beginPath(); x.arc(px, 160, 13, 0, 7); x.fill(); x.fillRect(px - 16, 172, 32, 70); } }
+  // mullions
+  x.fillStyle = '#0b0b0d'; for (const px of [0, 128, 256, 384, 508]) x.fillRect(px, 0, 5, 256); x.fillRect(0, 0, 512, 6); x.fillRect(0, 250, 512, 6);
+  return canvasTex(c);
+}

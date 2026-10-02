@@ -44,22 +44,55 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.35, 1.2);
 composer.addPass(bloom);
 const post = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, aber: { value: 0.0008 }, vig: { value: 0.4 }, grain: { value: 0.022 } },
+  uniforms: {
+    tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) },
+    aber: { value: 0.0006 }, vig: { value: 0.42 }, grain: { value: 0.02 }, speed: { value: 0 }, sharpen: { value: 0.35 },
+    sat: { value: 1.08 }, contrast: { value: 1.06 }, flash: { value: 0 }, hurt: { value: 0 },
+    shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+  },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, aber, vig, grain; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 res; uniform float time, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
     void main(){
-      vec2 c = vUv - 0.5; float d = dot(c,c);
-      vec2 off = c * aber * (1.0 + d*8.0);
-      vec3 col = vec3(texture2D(tDiffuse, vUv+off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv-off).b);
-      col *= 1.0 - d*vig*2.2;
-      float n = fract(sin(dot(vUv*1000.0 + time, vec2(12.9898,78.233)))*43758.5453);
-      col += (n-0.5)*grain;
-      col = mix(col, col*vec3(0.94,1.0,1.1), 0.35);
-      gl_FragColor = vec4(col,1.0);
+      vec2 uv = vUv; float aspect = res.x / res.y;
+      // expanding shockwave rings bend the image
+      for (int i = 0; i < 4; i++) {
+        vec4 s = shock[i];
+        if (s.w > 0.001) {
+          vec2 d = uv - s.xy; d.x *= aspect; float r = length(d);
+          float ring = exp(-pow((r - s.z) / 0.045, 2.0));
+          vec2 dir = d / (r + 1e-4); dir.x /= aspect;
+          uv -= dir * ring * s.w * 0.05;
+        }
+      }
+      vec2 c = uv - 0.5; float d2 = dot(c, c);
+      vec3 col;
+      if (speed > 0.01) { // radial speed blur
+        vec3 acc = vec3(0.0);
+        for (int i = 0; i < 8; i++) { float t = float(i) / 7.0; acc += texture2D(tDiffuse, 0.5 + c * (1.0 - speed * 0.07 * t)).rgb; }
+        col = acc / 8.0;
+      } else col = texture2D(tDiffuse, uv).rgb;
+      vec2 off = c * aber * (1.0 + d2 * 8.0);
+      col.r = texture2D(tDiffuse, uv + off).r * (speed > 0.01 ? 1.0 : 1.0) * 0.5 + col.r * 0.5;
+      col.b = texture2D(tDiffuse, uv - off).b * 0.5 + col.b * 0.5;
+      // unsharp mask
+      vec2 px = 1.0 / res;
+      vec3 bl = (texture2D(tDiffuse, uv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, uv - vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, uv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, uv - vec2(0.0, px.y)).rgb) * 0.25;
+      col += (col - bl) * sharpen;
+      // grade: teal-violet shadows, warm highlights, mild S-curve
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(l), col, sat);
+      col = (col - 0.5) * contrast + 0.5;
+      col += vec3(-0.012, 0.004, 0.03) * (1.0 - smoothstep(0.0, 0.5, l)) + vec3(0.03, 0.012, -0.015) * smoothstep(0.45, 1.0, l);
+      col += vec3(0.55, 0.6, 0.9) * flash * 0.12;
+      col *= 1.0 - d2 * vig * 2.0;
+      col = mix(col, col * vec3(1.15, 0.55, 0.55), hurt * smoothstep(0.1, 0.45, d2));
+      col += (hash(vUv * res + time) - 0.5) * grain;
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
     }`,
 });
-composer.addPass(post);
 composer.addPass(new OutputPass());
+composer.addPass(post);
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [
@@ -164,7 +197,7 @@ G.voiceOn = true;
 
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
+  renderer.setSize(w, h); composer.setSize(w, h); post.uniforms.res.value.set(w * QUALITY[G.quality].pr, h * QUALITY[G.quality].pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
 }
 addEventListener('resize', resize);
 
@@ -200,8 +233,13 @@ function simulate(dt) {
   world.update(G.modal ? 0 : dt, player.pos);
   fx.update(dt, gdt);
   const b = G.mode === 'bike' ? bike : null;
-  const aber = 0.0008 + (b ? clamp((Math.abs(b.speed) - 50) / 80, 0, 1) * 0.0022 + (b.boosting ? 0.002 : 0) : 0) + fx.shakeValue * 0.0012;
-  post.uniforms.aber.value = aber; post.uniforms.time.value = G.time % 100;
+  const sp01 = b ? clamp((Math.abs(b.speed) - 40) / 70, 0, 1) : 0;
+  const U = post.uniforms;
+  U.aber.value = 0.0006 + sp01 * 0.0016 + (b && b.boosting ? 0.0016 : 0) + fx.shakeValue * 0.001;
+  U.speed.value = damp(U.speed.value, b ? sp01 * 0.85 + (b.boosting ? 0.3 : 0) : 0, 5, dt);
+  U.time.value = G.time % 100; U.flash.value = world.lightning || 0;
+  U.hurt.value = damp(U.hurt.value, player.hp < player.maxHp * 0.3 && player.alive ? 0.7 : 0, 3, dt);
+  fx.updateShocks(U.shock.value, camera);
   const engaged = G.enemies.engaged();
   audio.setIntensity(clamp(engaged * 0.22 + (b ? clamp(Math.abs(b.speed) / 100, 0, 0.4) : 0) + (player.combo > 3 ? 0.2 : 0), 0, 1));
   const bk = G.mode === 'bike' ? bike : (bike.called ? bike : null);

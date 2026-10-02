@@ -145,16 +145,16 @@ export const weapons = {
     const a = p.a;
     if (best.player) {
       best.player.damage(p.dmg, p.vel.clone().normalize(), 'bullet');
-      fx.impact(hp, 6, 0xff8040); return true;
+      fx.impact(hp, 6, 0xff8040, p.vel.clone().normalize().negate()); return true;
     }
-    if (best.car) { best.car.hit(p.dmg); fx.impact(hp, 10, 0xffc060); audio.ping(hp); if (a.explosive) { this.explode(hp, a.radius, p.dmg, p.owner); } return !a.pierce; }
+    if (best.car) { best.car.hit(p.dmg); fx.impact(hp, 10, 0xffc060, p.vel.clone().normalize().negate()); audio.ping(hp); if (a.explosive) { this.explode(hp, a.radius, p.dmg, p.owner); } return !a.pierce; }
     const e = best.e;
     p.hitSet.add(e);
     if (a.explosive) { this.explode(hp, a.radius, p.dmg, p.owner); return true; }
     const dir = p.vel.clone().normalize();
     let dmg = p.dmg * (best.h.head ? 2.0 : 1);
     e.hurt(dmg, { type: 'bullet', dir, crit: best.h.head, ammo: a.id, point: hp });
-    fx.impact(hp, best.h.head ? 14 : 8, best.h.head ? 0xffffff : a.color);
+    fx.impact(hp, best.h.head ? 14 : 8, best.h.head ? 0xffffff : a.color, dir.clone().negate());
     if (best.h.head) { fx.text(hp, 'HEADSHOT', 'crit'); fx.ring(hp, 0xffffff, 1.6, 0.25, G.camera.position.clone().sub(hp).normalize()); }
     audio.hit(hp);
     if (G.hud) G.hud.hitMarker(best.h.head);
@@ -165,14 +165,20 @@ export const weapons = {
 
   onWorldHit(p, wh, hp) {
     const a = p.a;
-    const n = tmpC.set(wh.nx, wh.ny, wh.nz);
-    if (a.explosive) { this.explode(hp.clone().addScaledVector(n, 0.3), a.radius, p.dmg, p.owner); return true; }
-    if (a.fire) { this.firePatch(hp.clone().addScaledVector(n, 0.2), 3.2, 4.5); fx.impact(hp, 10, 0xff9020); return true; }
+    const n = new THREE.Vector3(wh.nx, wh.ny, wh.nz);
+    // ground-floor shopfronts stand ~0.4 m proud of the wall collider, so lift effects out in front of them
+    const fp = hp.clone().addScaledVector(n, Math.abs(n.y) < 0.1 && hp.y > 0.25 && hp.y < 3.6 ? 0.46 : 0.03);
+    if (a.explosive) {
+      this.explode(hp.clone().addScaledVector(n, 0.3), a.radius, p.dmg, p.owner);
+      if (n.y < 0.5) fx.decal(fp, n, 1, a.radius * 0.5);          // blast scorch on the wall
+      return true;
+    }
+    if (a.fire) { this.firePatch(hp.clone().addScaledVector(n, 0.2), 3.2, 4.5); fx.impact(fp, 10, 0xff9020, n); fx.decal(fp, n, 1, 2.0); return true; }
     if (a.pierce && wh.ny === 0) {
       // thin cover (low props / thin edges) can be pierced
       const nearby = world.nearbyBoxes(hp.x, hp.z, []);
       let thin = false; for (const b of nearby) if (hp.x >= b.minX - 0.1 && hp.x <= b.maxX + 0.1 && hp.z >= b.minZ - 0.1 && hp.z <= b.maxZ + 0.1 && b.h < 4) thin = true;
-      if (thin) { fx.impact(hp, 6, a.color); p.pos.addScaledVector(p.vel.clone().normalize(), 2.2); p.dmg *= 0.7; return false; }
+      if (thin) { fx.impact(fp, 6, a.color, n); fx.decal(fp, n, 0, 0.3); p.pos.addScaledVector(p.vel.clone().normalize(), 2.2); p.dmg *= 0.7; return false; }
     }
     if (p.bounces > 0) {
       p.bounces--;
@@ -180,11 +186,13 @@ export const weapons = {
       v.x -= 2 * dot * n.x; v.y -= 2 * dot * n.y; v.z -= 2 * dot * n.z;
       p.pos.copy(hp).addScaledVector(n, 0.05);
       p.hitSet.clear();
-      fx.spark(hp, 14, a.color, 9, 0.4); fx.flash(hp, a.color, 2, 0.06, 10); audio.ping(hp);
+      fx.spark(fp, 16, a.color, 18, 0.45, tmpA.copy(v).normalize(), 0.45); fx.flash(fp, a.color, 2, 0.06, 10); audio.ping(hp);
+      fx.decal(fp, n, 0, 0.2);
       return false;
     }
-    fx.impact(hp, a.id === 'ap' ? 18 : 8, a.color);
-    fx.smokePuff(hp, 1, 0.8, 0.6, 0.3, 0.3);
+    fx.impact(fp, a.id === 'ap' ? 18 : 8, a.color, n);
+    fx.decal(fp, n, 0, a.id === 'ap' ? 0.36 : 0.28);
+    fx.smokePuff(fp, 1, 0.8, 0.6, 0.3, 0.3);
     if (hp.distanceTo(G.camera.position) < 40 && Math.random() < 0.5) audio.ping(hp);
     return true;
   },
@@ -214,6 +222,7 @@ export const weapons = {
 
   firePatch(pos, r, dur) {
     firePatches.push({ pos: new THREE.Vector3(pos.x, 0, pos.z), r, t: dur, tick: 0 });
+    fx.decal(tmpA.set(pos.x, 0.02, pos.z), tmpB.set(0, 1, 0), 1, r * 1.7);
     G.civs?.panic(pos, 14);
     fx.flash(new THREE.Vector3(pos.x, 1.5, pos.z), 0xff8a30, 3, 0.4, 20);
   },

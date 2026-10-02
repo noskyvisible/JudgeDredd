@@ -142,6 +142,13 @@ export class Lawmaster {
         fx.add.emit(w.x, w.y, w.z, back.x * 8, rand(0, 1), back.z * 8, 2.4, 1.0, 0.25, 1, rand(0.2, 0.4), rand(0.1, 0.2), 0, 2, -0.7);
       }
       fx.flash(this.pos.clone().add(this.fwd.clone().multiplyScalar(-3)).setY(1), 0x4090ff, 0.8, 0.06, 14);
+      if (G.mounted === this) {   // air streaks rushing past the camera
+        const sx = -this.fwd.z, sz = this.fwd.x, sp = Math.max(20, Math.abs(this.speed));
+        for (let k = 0; k < 2; k++) {
+          const f = rand(2, 16), sd = rand(-5, 5);
+          fx.sparks.emit(this.pos.x + this.fwd.x * f + sx * sd, rand(0.3, 3.2), this.pos.z + this.fwd.z * f + sz * sd, -this.fwd.x * sp * 0.55, 0, -this.fwd.z * sp * 0.55, 0.5, 0.85, 2.2, rand(0.12, 0.25), 0.07, 0, 0);
+        }
+      }
     } else if (this.speed > 5 && chance(0.3)) {
       const w = ex[chance(0.5) ? 0 : 1].clone().applyMatrix4(this.model.matrixWorld);
       fx.add.emit(w.x, w.y, w.z, -this.vx * 0.1, 0.2, -this.vz * 0.1, 0.4, 0.8, 1.6, 0.6, 0.3, 0.12, 0, 2, -0.5);
