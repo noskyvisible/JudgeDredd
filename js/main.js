@@ -10,12 +10,13 @@ import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
 import { weapons } from './weapons.js';
-import { EnemyManager } from './enemies.js';
+import { EnemyManager, Enemy } from './enemies.js';
 import { CivManager } from './civs.js';
 import { Traffic } from './traffic.js';
 import { Pickups } from './pickups.js';
 import { CrimeManager } from './crimes.js';
 import { Player } from './player.js';
+import { Character, makeLawgiver, makeBaton } from './character.js';
 import { Lawmaster, ridePose } from './bike.js';
 import { hud, judgement } from './ui.js';
 import { clamp, damp, rand } from './util.js';
@@ -25,6 +26,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 const PR = Math.min(devicePixelRatio || 1, 1.5);
 renderer.setPixelRatio(PR);
 renderer.setSize(innerWidth, innerHeight);
+renderer.info.autoReset = false;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
 const scene = new THREE.Scene();
@@ -172,6 +174,7 @@ function simulate(dt) {
     if (input.pressed('KeyP')) setPaused(true);
     if (input.pressed('KeyV')) { G.voiceOn = !G.voiceOn; hud.feed(`DREDD VOICE ${G.voiceOn ? 'ON' : 'OFF'}`); }
     if (input.pressed('KeyN')) hud.feed(`MUSIC ${audio.toggleMusic() ? 'ON' : 'OFF'}`);
+    if (input.pressed('F3')) G.showFps = !G.showFps;
     if (input.pressed('KeyO')) setQuality((G.quality + 2) % 3, true);
   } else if (G.mapOpen && input.pressed('KeyM')) hud.toggleMap();
   const gdt = G.modal || G.mapOpen ? 0 : dt * G.timeScale;
@@ -204,6 +207,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   simulate(dt);
+  renderer.info.reset();
   if (!window.__noRender) composer.render();
   input.endFrame();
   frames++; acc += dt;
@@ -217,5 +221,5 @@ document.getElementById('boot').style.display = 'none';
 requestAnimationFrame(frame);
 
 // debug / test hooks
-window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input };
+window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };

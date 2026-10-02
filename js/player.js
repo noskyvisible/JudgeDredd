@@ -49,7 +49,28 @@ export class Player {
     this.camPos = new THREE.Vector3(); this.camInit = false;
     this.dmgBonus = 1;
     this.heatPulse = 0;
-    this.fill = new THREE.PointLight(0xb8c4ff, 14, 20, 2); scene.add(this.fill);
+    this.fill = new THREE.PointLight(0xc4ccff, 26, 24, 2); scene.add(this.fill);
+    this.targetRing = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.8, toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }));
+    this.targetRing.visible = false; this.targetRing.renderOrder = 4; scene.add(this.targetRing);
+    this.load();
+  }
+  updateTargetRing() {
+    const show = G.mode === 'foot' && this.alive && !this.aiming && (this.state === 'free' || this.state === 'attack');
+    let t = null;
+    if (show) t = this.state === 'attack' ? this.atkTarget : this.findTarget(this.inputDir());
+    if (t && !t.removed && t.hostile && t.active) {
+      this.targetRing.visible = true; this.targetRing.position.set(t.pos.x, 0.12, t.pos.z);
+      const s = 1.1 * t.scale + Math.sin(G.time * 8) * 0.06; this.targetRing.scale.set(s, 1, s);
+      this.targetRing.material.color.set(t.threat ? 0xff3030 : 0xffd24a);
+    } else this.targetRing.visible = false;
+  }
+  save() { try { localStorage.setItem('dredd.save', JSON.stringify({ cred: this.cred, rank: this.rank, maxHp: this.maxHp, dmg: this.dmgBonus, stats: this.stats, best: this.bestCombo })); } catch (e) { /* storage unavailable */ } }
+  load() {
+    try {
+      const s = JSON.parse(localStorage.getItem('dredd.save') || 'null'); if (!s) return;
+      this.cred = s.cred || 0; this.rank = s.rank || 0; this.maxHp = s.maxHp || 100; this.hp = this.maxHp; this.dmgBonus = s.dmg || 1; this.bestCombo = s.best || 0;
+      this.stats = { ...this.stats, ...(s.stats || {}) };
+    } catch (e) { /* ignore */ }
   }
   get dead() { return !this.alive; }
   centre(out = _v) { return out.set(this.pos.x, this.pos.y + (G.mode === 'bike' ? 1.5 : 1.05), this.pos.z); }
@@ -93,7 +114,7 @@ export class Player {
     if (d < radius) { const k = 1 - d / radius; this.damage(dmg * k, _w.set(this.pos.x - pos.x, 0, this.pos.z - pos.z).normalize().clone(), 'explosion'); }
   }
   die() {
-    this.alive = false; this.hp = 0; this.deadT = 0;
+    this.alive = false; this.hp = 0; this.deadT = 0; this.targetRing.visible = false;
     this.ch.play('die', { speed: 1.2 });
     if (G.mode === 'bike') G.dismount(true);
     G.onPlayerDeath?.();
@@ -109,6 +130,7 @@ export class Player {
       G.hud?.banner('RANK UP', RANKS[r].name, 'rank'); audio.ui('rank'); audio.voice('Rank up.');
     }
     if (label) G.hud?.feed(`${n > 0 ? '+' : ''}${n} CRED  ${label}`, n >= 0 ? 'good' : 'bad');
+    this.save();
   }
   addCombo(n) {
     this.combo += n; this.comboT = 3.5; this.bestCombo = Math.max(this.bestCombo, this.combo);
@@ -231,6 +253,7 @@ export class Player {
       if (e === 'done' && (this.state === 'attack' || this.state === 'finisher' || this.state === 'counter')) this.endAttack();
     }
     this.updateRibbon();
+    this.updateTargetRing();
     this.updateCamera(dt);
   }
 

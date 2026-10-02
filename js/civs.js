@@ -28,6 +28,7 @@ export class Civilian {
     this.hostage = false;
     G.scene.add(this.ch.root);
     this.ch.root.visible = false;
+    this.ch.root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
   }
   placeOnRing() {
     const pl = G.player.pos;
@@ -112,6 +113,7 @@ export class CivManager {
         if (c.state === 'gone' || d > 130 || (c.state === 'dead' && c.stateT > 10)) { c.placeOnRing(); }
       }
       if (c.ch.root.visible) c.update(dt);
+      if (!c.victim && c.ch.root.visible) { const dd = Math.hypot(c.pos.x - pl.pos.x, c.pos.z - pl.pos.z); c.ch.root.children.forEach((k) => { k.visible = dd < 90; }); }
     }
     this.list = this.list.filter((c) => !c.removed);
   }

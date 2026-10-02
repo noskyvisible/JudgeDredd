@@ -157,3 +157,6 @@ button:hover:not(:disabled) { transform: scale(1.06); filter: brightness(1.15); 
 .jresult.good h3 { color: #6dff9a; } .jresult.ok h3 { color: var(--gold); } .jresult.bad h3 { color: var(--red); }
 .jresult p { margin: 6px 0 0; opacity: .8; letter-spacing: .1em; }
 @media (max-width: 800px) { .jbox { grid-template-columns: 1fr; } h1 { font-size: 54px; } }
+
+#fps { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); font: 11px monospace; opacity: .6; display: none; }
+#fps.on { display: block; }

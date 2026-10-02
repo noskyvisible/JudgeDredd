@@ -18,7 +18,7 @@ let mm, mmx, bm, bmx;
 export const hud = {
   init() {
     for (const id of ['hud', 'vignette', 'speedlines', 'lightning', 'rankname', 'credbar', 'credtxt', 'district', 'crimebar', 'dispatch', 'combo', 'combonum', 'combobar', 'finisher',
-      'minimap', 'feed', 'hpbar', 'hptxt', 'armorbar', 'ammo', 'speedo', 'speed', 'boostbar', 'ap', 'crosshair', 'hitmark', 'prompt', 'banner', 'bannertitle', 'bannersub', 'warn', 'objective', 'mapscreen', 'bigmap', 'judge', 'pause', 'death', 'stats']) el[id] = $(id);
+      'minimap', 'fps', 'feed', 'hpbar', 'hptxt', 'armorbar', 'ammo', 'speedo', 'speed', 'boostbar', 'ap', 'crosshair', 'hitmark', 'prompt', 'banner', 'bannertitle', 'bannersub', 'warn', 'objective', 'mapscreen', 'bigmap', 'judge', 'pause', 'death', 'stats']) el[id] = $(id);
     mm = el.minimap; mmx = mm.getContext('2d'); bm = el.bigmap; bmx = bm.getContext('2d');
     // ammo slots
     el.ammo.innerHTML = '';
@@ -85,6 +85,7 @@ export const hud = {
     this.updateDispatch();
     this.updateObjective();
     this.minimap();
+    if (G.showFps) { el.fps.classList.add('on'); el.fps.textContent = `${Math.round(G.fps || 0)} fps · ${G.renderer.info.render.calls} calls · ${(G.renderer.info.render.triangles / 1000) | 0}k tris`; } else el.fps.classList.remove('on');
   },
 
   updateDispatch() {

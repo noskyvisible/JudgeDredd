@@ -135,7 +135,7 @@ function box(w, h, d, m, x = 0, y = 0, z = 0) {
 
 // ---------------------------------------------------------------------------
 export const STYLES = {
-  dredd: { scale: 1.0, bulk: 1.15, armor: 0x1d2128, under: 0x14171c, gold: 0xe8b52a, skin: 0xb98a6a, helmet: 0x181a20, visor: 0xffb830, pauldron: true, eagle: true, boots: 0x0c0d10, belt: 0x2a2a30 },
+  dredd: { scale: 1.0, bulk: 1.15, armor: 0x2a303b, under: 0x1b1f26, gold: 0xe8b52a, skin: 0xb98a6a, helmet: 0x181a20, visor: 0xffb830, pauldron: true, eagle: true, boots: 0x0c0d10, belt: 0x2a2a30 },
   thug: { scale: 1.0, bulk: 1.0, armor: 0x5a3a2a, under: 0x2a2a3a, gold: 0x777777, skin: 0xc09070, hair: 0x2a1a10, boots: 0x15151a },
   gunman: { scale: 1.0, bulk: 1.0, armor: 0x2a3a4a, under: 0x1a1a24, gold: 0x999999, skin: 0xa07860, hair: 0x111111, boots: 0x101015, mask: 0x111111 },
   brute: { scale: 1.3, bulk: 1.5, armor: 0x4a4a52, under: 0x2a2020, gold: 0xb04a2a, skin: 0x9a7a6a, hair: 0x000000, boots: 0x101010, plates: 0x6a6a74 },
@@ -168,7 +168,7 @@ export class Character {
     // torso: tapered V — broad shoulders over a narrower waist
     this.torso = new THREE.Group(); this.torso.position.y = 0.1; this.hips.add(this.torso);
     this.torso.add(box(0.5 * b, 0.26, 0.3 * b, under, 0, 0.1, 0));                       // abdomen
-    this.torso.add(box(0.74 * b, 0.4, 0.4 * b, armor, 0, 0.45, 0));                      // chest
+    this.torso.add(box(0.7 * b, 0.4, 0.38 * b, armor, 0, 0.45, 0));                      // chest
     this.torso.add(box(0.78 * b, 0.1, 0.36 * b, armor, 0, 0.66, -0.01));                 // shoulder yoke
     this.torso.add(box(0.5 * b, 0.22, 0.08, mat(0x050507, { roughness: 0.3, metalness: 0.6 }), 0, 0.46, 0.2 * b)); // chest plate
     this.torso.add(box(0.5 * b, 0.4, 0.1, mat(0x0a0a0d, { roughness: 0.5, metalness: 0.5 }), 0, 0.45, -0.21 * b)); // back armour
@@ -201,7 +201,7 @@ export class Character {
       for (const x of [-0.23, 0.23]) this.head.add(box(0.05, 0.3, 0.34, hel, x, 0.1, 0.0)); // cheek plates
       this.head.add(box(0.44, 0.16, 0.12, hel, 0, 0.02, -0.14));                            // neck guard
     } else {
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), skin); head.position.y = 0.17; head.castShadow = true; this.head.add(head);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), skin); head.position.y = 0.18; head.castShadow = true; this.head.add(head);
       if (st.hair !== undefined) { const hair = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(st.hair, { roughness: 0.9, metalness: 0 })); hair.position.y = 0.2; hair.scale.y = 1.1; this.head.add(hair); }
       if (st.helmetCol) { const h = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(st.helmetCol, { roughness: 0.2, metalness: 0.8 })); h.position.y = 0.19; h.scale.set(1, 0.95, 1.05); this.head.add(h); this.head.add(box(0.28, 0.07, 0.1, mat(0x111111, { roughness: 0.1, metalness: 1 }), 0, 0.18, 0.17)); }
       if (st.mask) { const m = box(0.26, 0.1, 0.06, mat(st.mask), 0, 0.1, 0.15); this.head.add(m); }
@@ -222,12 +222,12 @@ export class Character {
       const fist = box(0.1, 0.12, 0.12, st.eagle ? mat(0x111111, { roughness: 0.6 }) : skin, 0, -0.04, 0); hand.add(fist);
       // pauldron
       if (st.pauldron || st.plates !== undefined) {
-        const pr = (st.pauldron ? 0.17 : 0.15) * b;
-        const pg = new THREE.SphereGeometry(pr, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5);
-        const pm = new THREE.Mesh(pg, st.pauldron ? gold : mat(st.plates, { roughness: 0.4, metalness: 0.6 })); pm.position.set(sx * 0.05, 0.08, 0); pm.rotation.z = -sx * 0.35; pm.scale.set(1.35, 0.8, 1.25); pm.castShadow = true; sh.add(pm);
+        const pr = (st.pauldron ? 0.2 : 0.17) * b;
+        const pg = new THREE.SphereGeometry(pr, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.62);
+        const pm = new THREE.Mesh(pg, st.pauldron ? gold : mat(st.plates, { roughness: 0.4, metalness: 0.6 })); pm.position.set(sx * 0.04, 0.02, 0); pm.rotation.z = -sx * 0.3; pm.scale.set(1.15, 0.95, 1.15); pm.castShadow = true; sh.add(pm);
         if (st.pauldron && side === 'L') { // eagle emblem on the left pauldron
           const eg = makeEagle(mat(0x14110a, { roughness: 0.5, metalness: 0.4 }), 0.3, 0.015);
-          eg.position.set(sx * 0.24, 0.16, 0.0); eg.rotation.set(Math.PI / 2 - 0.2, 0, 0); eg.rotation.order = 'ZXY'; eg.rotation.z = -Math.PI / 2 + 0.0; sh.add(eg);
+          eg.position.set(sx * 0.27, 0.1, 0.0); eg.rotation.set(Math.PI / 2 - 0.2, 0, 0); eg.rotation.order = 'ZXY'; eg.rotation.z = -Math.PI / 2 + 0.0; sh.add(eg);
         }
       }
       return { sh, el, hand };
