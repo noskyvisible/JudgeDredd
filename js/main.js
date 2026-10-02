@@ -41,6 +41,12 @@ const rt = new THREE.WebGLRenderTarget(innerWidth * PR, innerHeight * PR, { type
 const composer = new EffectComposer(renderer, rt);
 composer.setPixelRatio(PR);
 composer.addPass(new RenderPass(scene, camera));
+// scrub NaN / Inf / absurd HDR values before bloom: a single bad pixel would otherwise get blurred across the whole screen (black frame)
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 48.0), 1.0); }',
+}));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.35, 1.2);
 composer.addPass(bloom);
 const post = new ShaderPass({

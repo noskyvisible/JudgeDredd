@@ -213,7 +213,7 @@ class ArcPool {
         const r1 = A.still ? A.off[s * 2] + (Math.random() - 0.5) * 0.12 : Math.random() - 0.5, r2 = A.still ? A.off[s * 2 + 1] + (Math.random() - 0.5) * 0.12 : Math.random() - 0.5;
         cur.copy(A.a).addScaledVector(dir, len * t).addScaledVector(perp1, r1 * 2 * amp).addScaledVector(perp2, r2 * 2 * amp);
         if (s > 0) {
-          mid.addVectors(prev, cur).multiplyScalar(0.5).sub(cam); side.subVectors(cur, prev).cross(mid).normalize();
+          mid.addVectors(prev, cur).multiplyScalar(0.5).sub(cam); side.subVectors(cur, prev).cross(mid); if (side.lengthSq() < 1e-12) side.set(0, 1, 0); else side.normalize();
           const flick = 0.75 + Math.random() * 0.5, wd = A.width;
           vi = this.quad(vi, prev, cur, side, 0.11 * wd * (0.5 + k * 0.5), 0, 0, 0, 0.55 * k * flick, 0, 0, 0, 0);   // soft glow (colour set below)
           for (let q = vi - 6; q < vi; q++) { this.col[q * 4] = A.c.r * 1.5; this.col[q * 4 + 1] = A.c.g * 1.5; this.col[q * 4 + 2] = A.c.b * 1.5; }
