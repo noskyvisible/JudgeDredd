@@ -107,7 +107,7 @@ G.mount = () => {
   G.mode = 'bike'; player.state = 'free'; player.ch.stopClip(); player.ch.roll = 0;
   player.ch.root.removeFromParent(); b.model.add(player.ch.root);
   player.ch.root.position.set(0, 0.8, -0.3); player.ch.root.rotation.set(0, 0, 0); player.ch.pivot.rotation.x = 0;
-  ridePose(player.ch, b); b.auto = false; b.called = false; b.mounted = true; G.mounted = b;
+  ridePose(player.ch, b); b.auto = false; b.called = false; b.ctrl.hold = false; b.mounted = true; G.mounted = b;
   player.camYaw = b.yaw; player.camPitch = 0.2; player.vel.set(0, 0, 0);
   audio.ui('switch'); hud.feed('LAWMASTER ONLINE', 'good');
   if (!G.rodeHint) { G.rodeHint = true; hud.feed('G — autopilot to tracked crime · SHIFT boost · H siren', ''); }
@@ -118,13 +118,13 @@ G.dismount = (force) => {
   player.ch.root.removeFromParent(); scene.add(player.ch.root); player.ch.root.rotation.set(0, 0, 0);
   const r = new THREE.Vector3(Math.cos(b.yaw), 0, -Math.sin(b.yaw));
   player.pos.copy(b.pos).addScaledVector(r, 2.2); player.yaw = b.yaw; player.vel.set(0, 0, 0);
-  b.ctrl.throttle = 0; b.ctrl.brake = 1; b.ctrl.steer = 0; b.ctrl.boost = false; b.ctrl.drift = false; b.auto = false;
+  b.ctrl.throttle = 0; b.ctrl.brake = 0; b.ctrl.hold = true; b.ctrl.steer = 0; b.ctrl.boost = false; b.ctrl.drift = false; b.auto = false;
   world.collideCircle(player.pos, 0.6);
   audio.setSiren(b.sirenOn);
 };
 G.callBike = () => {
   const b = G.bikeObj; if (b.called) return;
-  b.called = true; b.path.pts = []; hud.feed('LAWMASTER INBOUND', 'good'); audio.ui('beep');
+  b.called = true; b.ctrl.hold = false; b.path.pts = []; hud.feed('LAWMASTER INBOUND', 'good'); audio.ui('beep');
 };
 
 // ---------------------------------------------------------------- game flow
@@ -185,8 +185,8 @@ function simulate(dt) {
       if (b.called) {
         const arrived = b.autopilot(gdt, player.pos);
         const d = Math.hypot(b.pos.x - player.pos.x, b.pos.z - player.pos.z);
-        if (d < 14 || arrived) { b.called = false; c.throttle = 0; c.brake = 1; c.steer = 0; hud.feed('LAWMASTER HERE — [E] MOUNT', 'good'); }
-      } else { c.throttle = 0; c.brake = 1; c.steer = 0; c.boost = false; c.drift = false; }
+        if (d < 14 || arrived) { b.called = false; c.throttle = 0; c.brake = 0; c.hold = true; c.steer = 0; hud.feed('LAWMASTER HERE — [E] MOUNT', 'good'); }
+      } else { c.throttle = 0; c.brake = 0; c.hold = true; c.steer = 0; c.boost = false; c.drift = false; }
       b.update(gdt);
     }
     G.enemies.update(gdt); G.civs.update(gdt); G.traffic.update(gdt); G.pickups.update(gdt); G.crimes.update(gdt); weapons.update(gdt);

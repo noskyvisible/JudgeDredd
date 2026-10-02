@@ -131,7 +131,7 @@ export class Lawmaster {
     this.speed = 0; this.steer = 0; this.lean = 0; this.boostE = 1; this.boosting = false; this.drifting = false;
     this.hp = 100; this.auto = false; this.path = new PathFollower(); this.sirenOn = false; this.sirenT = 0;
     this.accelLean = 0; this.slip = 0; this.rider = null; this.skidT = 0; this.called = false; this.wheelRot = 0;
-    this.ctrl = { throttle: 0, steer: 0, brake: 0, boost: false, drift: false };
+    this.ctrl = { throttle: 0, steer: 0, brake: 0, boost: false, drift: false, hold: false };
     this.radius = 1.0; this.perp = false;
   }
   place(x, z, yaw) { this.pos.set(x, 0, z); this.yaw = yaw; this.vx = this.vz = 0; this.speed = 0; this.sync(); }
@@ -143,6 +143,7 @@ export class Lawmaster {
     let vf = this.vx * fx_ + this.vz * fz_, vl = this.vx * rx + this.vz * rz;
     const maxV = 78, maxB = 118;
     this.boosting = c.boost && this.boostE > 0.02 && c.throttle > 0;
+    if (c.hold) { c.throttle = 0; c.brake = 0; c.boost = false; vf *= Math.exp(-3.5 * dt); this.boosting = false; }
     const accel = 36 + (this.boosting ? 62 : 0);
     if (c.throttle > 0) vf += accel * c.throttle * dt * (1 - Math.max(0, vf) / (this.boosting ? maxB : maxV) * 0.8);
     if (c.brake > 0) { if (vf > 0.5) vf -= 70 * c.brake * dt; else vf -= 22 * c.brake * dt; }
