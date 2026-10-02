@@ -88,7 +88,7 @@ const floaters = [];
 let floatLayer;
 let shakeAmt = 0;
 let hitstopT = 0, slowT = 0, slowScale = 1;
-let ringGeo, ringTex;
+let ringGeo, ringTex, flareTex; const flares = []; let flareHead = 0;
 
 export const fx = {
   add: null, smoke: null,
@@ -105,6 +105,15 @@ export const fx = {
     ringTex = canvasTex(c);
     ringGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
 
+    {
+      const [c2, x2] = makeCanvas(128, 128);
+      const rg = x2.createRadialGradient(64, 64, 0, 64, 64, 64); rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.18, 'rgba(255,255,255,0.55)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+      x2.fillStyle = rg; x2.fillRect(0, 0, 128, 128);
+      x2.globalCompositeOperation = 'lighter';
+      for (const [w2, h2] of [[128, 5], [5, 128], [92, 3], [3, 92]]) { const g2 = x2.createLinearGradient(64 - w2 / 2, 0, 64 + w2 / 2, 0); g2.addColorStop(0, 'rgba(255,255,255,0)'); g2.addColorStop(0.5, 'rgba(255,255,255,0.9)'); g2.addColorStop(1, 'rgba(255,255,255,0)'); x2.save(); x2.translate(64, 64); if (h2 > w2) x2.rotate(Math.PI / 2); x2.fillStyle = g2; x2.fillRect(-Math.max(w2, h2) / 2, -Math.min(w2, h2) / 2, Math.max(w2, h2), Math.min(w2, h2)); x2.restore(); }
+      flareTex = canvasTex(c2);
+      for (let i = 0; i < 6; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: flareTex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, toneMapped: false, fog: false })); s.visible = false; s.renderOrder = 15; s.userData = { t: 0, dur: 0.06, size: 1 }; scene.add(s); flares.push(s); }
+    }
     for (let i = 0; i < 5; i++) {
       const l = new THREE.PointLight(0xffffff, 0, 30, 2);
       l.userData = { t: 0, dur: 0.1, peak: 0 };
@@ -141,9 +150,15 @@ export const fx = {
     }
     if (Math.random() < 0.4) this.smoke.emit(p.x, p.y + 1, p.z, rand(-0.5, 0.5), rand(1.5, 3), rand(-0.5, 0.5), 0.1, 0.1, 0.11, 0.45, rand(1.5, 2.5) * scale, rand(1, 1.8), -0.2, 0.5, 1.5);
   },
-  rain(p) { this.add.emit(p.x, p.y, p.z, rand(-1, 1), rand(1, 3), rand(-1, 1), 0.5, 0.65, 0.9, 0.5, 0.15, 0.25, 6, 0, 0.5); },
+  rain(p) { this.add.emit(p.x, p.y, p.z, rand(-0.6, 0.6), rand(0.8, 2), rand(-0.6, 0.6), 0.4, 0.5, 0.75, 0.3, 0.09, 0.2, 6, 0, 0.4); },
+  flare(p, color, size = 1.6, dur = 0.07) {
+    const s = flares[flareHead]; flareHead = (flareHead + 1) % flares.length;
+    s.position.copy(p); s.material.color.set(color).multiplyScalar(2.2); s.material.rotation = Math.random() * 6.28;
+    s.userData.t = dur; s.userData.dur = dur; s.userData.size = size; s.scale.setScalar(size); s.visible = true;
+  },
   muzzle(p, dir, color) {
     _c.set(color);
+    this.flare(p, color, 2.2, 0.07);
     this.glowPuff(p, color, 1.6, 0.07);
     for (let i = 0; i < 5; i++) this.add.emit(p.x, p.y, p.z, dir.x * 18 + rand(-4, 4), dir.y * 18 + rand(-4, 4), dir.z * 18 + rand(-4, 4), _c.r * 1.6, _c.g * 1.6, _c.b * 1.6, 1, rand(0.1, 0.22), rand(0.06, 0.15), 0, 4, -0.5);
     this.flash(p, color, 6, 0.07, 14);
@@ -203,6 +218,7 @@ export const fx = {
       if (l.userData.t > 0) { l.userData.t -= gdt; l.intensity = Math.max(0, l.userData.peak * (l.userData.t / l.userData.dur)); }
       else l.intensity = 0;
     }
+    for (const s of flares) if (s.visible) { s.userData.t -= rdt; if (s.userData.t <= 0) s.visible = false; else { const k = s.userData.t / s.userData.dur; s.scale.setScalar(s.userData.size * (0.6 + 0.6 * k)); s.material.opacity = k; } }
     shakeAmt = Math.max(0, shakeAmt - rdt * 3.2);
     // time scale
     let ts = 1;

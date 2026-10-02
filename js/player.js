@@ -73,7 +73,7 @@ export class Player {
     } catch (e) { /* ignore */ }
   }
   get dead() { return !this.alive; }
-  centre(out = _v) { return out.set(this.pos.x, this.pos.y + (G.mode === 'bike' ? 1.5 : 1.05), this.pos.z); }
+  centre(out = _v) { return out.set(this.pos.x, this.pos.y + (G.mode === 'bike' ? 1.55 : 1.4), this.pos.z); }
   get muzzlePos() { const m = this.lawgiver.userData.muzzle; return m.getWorldPosition(new THREE.Vector3()); }
 
   respawn() {
@@ -232,7 +232,11 @@ export class Player {
     for (let i = 0; i < 6; i++) if (input.pressed('Digit' + (i + 1))) this.selectAmmo(i);
     const w = input.takeWheel(); if (w) this.selectAmmo((this.ammoIdx + (w > 0 ? 1 : 5)) % 6);
 
-    this.aiming = input.mouse(2) && this.state !== 'dodge' && this.state !== 'finisher' && this.state !== 'counter';
+    if (input.pressed('KeyZ')) { this.aimToggle = !this.aimToggle; G.hud?.feed(this.aimToggle ? 'AIM LOCKED — LMB / R to fire, Z to lower' : 'AIM RELEASED', 'good'); }
+    this.hipFireT = Math.max(0, (this.hipFireT || 0) - dt);
+    const aimHeld = input.mouse(2) || this.aimToggle || this.hipFireT > 0;
+    this.aiming = aimHeld && this.state !== 'dodge' && this.state !== 'finisher' && this.state !== 'counter';
+    this.fireHeld = input.mouse(0) || input.down('KeyR');
     if (G.mode === 'bike') this.updateBike(dt); else this.updateFoot(dt);
 
     // aiming visuals
@@ -285,7 +289,8 @@ export class Player {
         // actions
         if (input.pressed('Space')) { this.startDodge(dir); break; }
         if (input.pressed('KeyF')) { this.tryCounter(); }
-        if (this.aiming) { if (input.mouse(0)) this.tryFire(AMMO[this.ammoIdx].auto ? true : input.mousePressed(0)); }
+        if (this.aiming) { if (this.fireHeld) this.tryFire(); }
+        else if (input.down('KeyR')) { this.hipFireT = 0.7; this.tryFire(); }   // R fires straight from the hip even without aiming
         else if (input.mousePressed(0)) { this.startAttack(); break; }
         if (input.pressed('KeyQ')) this.snapShot();
         this.handleInteract(dt);
@@ -431,8 +436,9 @@ export class Player {
     if (this.ammo[this.ammoIdx] !== Infinity) this.ammo[this.ammoIdx]--;
     this.fireCool = a.rate; this.recoil = 1;
     fx.muzzle(muzzle, dir, a.color); audio.shot(this.ammoIdx, muzzle);
-    fx.shake(a.explosive ? 0.45 : a.id === 'ap' ? 0.3 : 0.1);
-    this.camPitch -= a.explosive ? 0.03 : 0.006;
+    fx.shake(a.explosive ? 0.6 : a.id === 'ap' ? 0.4 : 0.16);
+    this.camPitch -= a.explosive ? 0.03 : 0.008; this.camFov -= a.explosive ? 3 : 1.2; this.lastShotT = G.time;
+    G.hud?.fired(a);
     this.ch.play('shoot', { speed: 1.6 }); this.ch.clipT = 0;
     G.civs?.panic(muzzle, 25);
     G.crimes?.gunshot(this.pos);
@@ -490,7 +496,8 @@ export class Player {
     this.pos.copy(b.pos); this.yaw = b.yaw; this.speedNow = Math.abs(b.speed);
     ch.speed = 0;
     // gun while riding
-    if (this.aiming) { if (input.mouse(0)) this.tryFire(true); }
+    if (this.aiming) { if (this.fireHeld) this.tryFire(); }
+    else if (input.down('KeyR')) { this.hipFireT = 0.7; this.tryFire(); }
     ch.shR.rotation.order = 'YXZ';
     b.aimYaw = this.aiming ? clamp(angDiff(b.yaw, this.camYaw), -1.3, 1.3) : 0;
     if (input.pressed('KeyE') && Math.abs(b.speed) < 8) { G.dismount(); }
@@ -498,6 +505,7 @@ export class Player {
     if (Math.abs(b.speed) < 8 && !b.auto) this.prompt = '[E]  DISMOUNT';
     if (input.pressed('KeyQ')) this.snapShot();
     this.vel.set(b.vx, 0, b.vz);
+    this.baton.visible = false; this.lawgiver.visible = ch.aim > 0.15 || this.fireHeld;
     G.audioBike = { speed: Math.abs(b.speed) / 78, boost: b.boosting };
   }
 

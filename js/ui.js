@@ -18,7 +18,7 @@ let mm, mmx, bm, bmx;
 export const hud = {
   init() {
     for (const id of ['hud', 'vignette', 'speedlines', 'lightning', 'rankname', 'credbar', 'credtxt', 'district', 'crimebar', 'dispatch', 'combo', 'combonum', 'combobar', 'finisher',
-      'minimap', 'fps', 'feed', 'hpbar', 'hptxt', 'armorbar', 'ammo', 'speedo', 'speed', 'boostbar', 'ap', 'crosshair', 'hitmark', 'prompt', 'banner', 'bannertitle', 'bannersub', 'warn', 'objective', 'mapscreen', 'bigmap', 'judge', 'pause', 'death', 'stats']) el[id] = $(id);
+      'minimap', 'fps', 'feed', 'hpbar', 'hptxt', 'armorbar', 'ammo', 'speedo', 'speed', 'boostbar', 'ap', 'crosshair', 'hitmark', 'prompt', 'firehint', 'gunkeys', 'banner', 'bannertitle', 'bannersub', 'warn', 'objective', 'mapscreen', 'bigmap', 'judge', 'pause', 'death', 'stats']) el[id] = $(id);
     mm = el.minimap; mmx = mm.getContext('2d'); bm = el.bigmap; bmx = bm.getContext('2d');
     // ammo slots
     el.ammo.innerHTML = '';
@@ -45,6 +45,10 @@ export const hud = {
   hitMarker(crit) { const h = el.hitmark; h.className = ''; void h.offsetWidth; h.className = 'on' + (crit ? ' crit' : ''); },
   comboPop() { el.combonum.classList.add('pop'); setTimeout(() => el.combonum.classList.remove('pop'), 80); },
   warn() { el.warn.className = ''; void el.warn.offsetWidth; el.warn.className = 'on'; },
+  fired(a) {
+    const s = this.slots?.[AMMO.indexOf(a)]; if (s) { s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
+    el.crosshair.classList.add('fired'); clearTimeout(this._ft); this._ft = setTimeout(() => el.crosshair.classList.remove('fired'), 90);
+  },
   flashAmmo(i) { const s = this.slots[i]; s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); },
 
   update(dt) {
@@ -72,6 +76,8 @@ export const hud = {
     const a = AMMO[pl.ammoIdx]; el.ammoname.innerHTML = `<span style="color:${a.css}">${a.name}</span><small>${a.desc}</small>`;
     // crosshair
     el.crosshair.classList.toggle('on', pl.aiming && pl.alive);
+    el.firehint.classList.toggle('on', pl.aiming && pl.alive && G.time - (pl.lastShotT || -99) > 4 && !pl.firedOnce);
+    if (pl.lastShotT > 0) pl.firedOnce = (pl.firedOnce || 0) + 0 || (G.time - pl.lastShotT < 0.5 ? true : pl.firedOnce);
     el.crosshair.style.setProperty('--sp', (pl.recoil * 10 + clamp(pl.speedNow, 0, 12) * 0.5) + 'px'); pl.recoil = Math.max(0, pl.recoil - dt * 6);
     // prompt
     el.prompt.classList.toggle('on', !!pl.prompt); el.prompt.textContent = pl.prompt;

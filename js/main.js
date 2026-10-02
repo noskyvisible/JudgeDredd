@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { G } from './state.js';
+import { installHeightFog } from './shaders.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -21,6 +22,7 @@ import { Lawmaster, ridePose } from './bike.js';
 import { hud, judgement } from './ui.js';
 import { clamp, damp, rand } from './util.js';
 
+installHeightFog();
 const canvas = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 const PR = Math.min(devicePixelRatio || 1, 1.5);
@@ -39,7 +41,7 @@ const rt = new THREE.WebGLRenderTarget(innerWidth * PR, innerHeight * PR, { type
 const composer = new EffectComposer(renderer, rt);
 composer.setPixelRatio(PR);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.55, 1.0);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.35, 1.2);
 composer.addPass(bloom);
 const post = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, time: { value: 0 }, aber: { value: 0.0008 }, vig: { value: 0.4 }, grain: { value: 0.022 } },
@@ -106,7 +108,7 @@ G.mount = () => {
   const b = G.bikeObj; if (G.mode === 'bike') return;
   G.mode = 'bike'; player.state = 'free'; player.ch.stopClip(); player.ch.roll = 0;
   player.ch.root.removeFromParent(); b.model.add(player.ch.root);
-  player.ch.root.position.set(0, 0.8, -0.3); player.ch.root.rotation.set(0, 0, 0); player.ch.pivot.rotation.x = 0;
+  player.ch.root.position.set(0, 0.5, -0.58); player.ch.root.rotation.set(0, 0, 0); player.ch.pivot.rotation.x = 0;
   ridePose(player.ch, b); b.auto = false; b.called = false; b.ctrl.hold = false; b.mounted = true; G.mounted = b;
   player.camYaw = b.yaw; player.camPitch = 0.2; player.vel.set(0, 0, 0);
   audio.ui('switch'); hud.feed('LAWMASTER ONLINE', 'good');
@@ -114,7 +116,7 @@ G.mount = () => {
 };
 G.dismount = (force) => {
   const b = G.bikeObj; if (G.mode !== 'bike') return;
-  G.mode = 'foot'; G.mounted = null; b.mounted = false; player.ch.override = null;
+  G.mode = 'foot'; G.mounted = null; b.mounted = false; player.ch.override = null; player.baton.visible = true; player.lawgiver.visible = true;
   player.ch.root.removeFromParent(); scene.add(player.ch.root); player.ch.root.rotation.set(0, 0, 0);
   const r = new THREE.Vector3(Math.cos(b.yaw), 0, -Math.sin(b.yaw));
   player.pos.copy(b.pos).addScaledVector(r, 2.2); player.yaw = b.yaw; player.vel.set(0, 0, 0);
@@ -209,7 +211,7 @@ function simulate(dt) {
 }
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   simulate(dt);
   renderer.info.reset();
   if (!window.__noRender) composer.render();

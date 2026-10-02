@@ -257,7 +257,7 @@ export const audio = {
       this.playStep(step, nextStep, stepDur);
       nextStep += stepDur; step = (step + 1) % 64;
     }
-    rainNode?.gain.setTargetAtTime(G.mode === 'bike' ? 0.03 : 0.06, ctx.currentTime, 0.4);
+    rainNode?.gain.setTargetAtTime(G.mode === 'bike' ? 0.015 : 0.03, ctx.currentTime, 0.4);
   },
   playStep(s, t, d) {
     if (!musicOn) return;

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { G } from './state.js';
 import { deg, lerp, smooth, clamp } from './util.js';
-import { makeEagle } from './world.js';
+import { buildBody } from './charmodel.js';
 
 // ---------------------------------------------------------------------------
 // Procedural humanoid rig + pose-based animation.
@@ -124,137 +124,56 @@ for (const c of Object.values(CLIPS)) for (const f of c.frames) {
 }
 
 const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.35, ...o });
-
-function limb(len, rad0, rad1, m) {
-  const g = new THREE.CylinderGeometry(rad0, rad1, len, 8); g.translate(0, -len / 2, 0);
-  const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; return mesh;
-}
 function box(w, h, d, m, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mesh.position.set(x, y, z); mesh.castShadow = true; return mesh;
 }
 
 // ---------------------------------------------------------------------------
 export const STYLES = {
-  dredd: { scale: 1.0, bulk: 1.15, armor: 0x2a303b, under: 0x1b1f26, gold: 0xe8b52a, skin: 0xb98a6a, helmet: 0x181a20, visor: 0xffb830, pauldron: true, eagle: true, boots: 0x0c0d10, belt: 0x2a2a30 },
-  thug: { scale: 1.0, bulk: 1.0, armor: 0x5a3a2a, under: 0x2a2a3a, gold: 0x777777, skin: 0xc09070, hair: 0x2a1a10, boots: 0x15151a },
-  gunman: { scale: 1.0, bulk: 1.0, armor: 0x2a3a4a, under: 0x1a1a24, gold: 0x999999, skin: 0xa07860, hair: 0x111111, boots: 0x101015, mask: 0x111111 },
-  brute: { scale: 1.3, bulk: 1.5, armor: 0x4a4a52, under: 0x2a2020, gold: 0xb04a2a, skin: 0x9a7a6a, hair: 0x000000, boots: 0x101010, plates: 0x6a6a74 },
-  junkie: { scale: 0.95, bulk: 0.85, armor: 0x2a5a4a, under: 0x3a2a4a, gold: 0x5aff9a, skin: 0xb0a080, hair: 0x80ff40, boots: 0x202030 },
-  biker: { scale: 1.0, bulk: 1.05, armor: 0x5a1a22, under: 0x1a1218, gold: 0xaa2a3a, skin: 0xa07860, hair: 0x111111, boots: 0x0a0a0a, helmetCol: 0x7a1a28 },
-  boss: { scale: 1.5, bulk: 1.6, armor: 0x6a1a1a, under: 0x1a1010, gold: 0xe8b52a, skin: 0x8a6a5a, hair: 0x000000, boots: 0x0a0a0a, plates: 0x8a2222, mask: 0xaa1111 },
-  civ: { scale: 0.97, bulk: 0.95, armor: 0x3a4a6a, under: 0x2a2a3a, gold: 0x888888, skin: 0xc09070, hair: 0x3a2a1a, boots: 0x202025 },
+  dredd: { scale: 0.9, bulk: 1.15, hero: true, eagle: true, gold: 0xd6a328, skin: 0xb98a6a, visor: 0xff3020 },
+  thug: { scale: 0.86, bulk: 1.0, armor: 0x5a3a2a, under: 0x2a2a3a, gold: 0x777777, skin: 0xc09070, hair: 0x2a1a10, boots: 0x15151a },
+  gunman: { scale: 0.86, bulk: 1.0, armor: 0x2a3a4a, under: 0x1a1a24, gold: 0x999999, skin: 0xa07860, hair: 0x111111, boots: 0x101015, mask: 0x111111 },
+  brute: { scale: 1.08, bulk: 1.45, armor: 0x4a4a52, under: 0x2a2020, gold: 0xb04a2a, skin: 0x9a7a6a, hair: 0x000000, boots: 0x101010, plates: 0x6a6a74 },
+  junkie: { scale: 0.82, bulk: 0.85, armor: 0x2a5a4a, under: 0x3a2a4a, gold: 0x5aff9a, skin: 0xb0a080, hair: 0x80ff40, boots: 0x202030 },
+  biker: { scale: 0.88, bulk: 1.05, armor: 0x5a1a22, under: 0x1a1218, gold: 0xaa2a3a, skin: 0xa07860, hair: 0x111111, boots: 0x0a0a0a, helmetCol: 0x7a1a28 },
+  boss: { scale: 1.3, bulk: 1.55, armor: 0x6a1a1a, under: 0x1a1010, gold: 0xe8b52a, skin: 0x8a6a5a, hair: 0x000000, boots: 0x0a0a0a, plates: 0x8a2222, mask: 0xaa1111 },
+  civ: { scale: 0.82, bulk: 0.95, armor: 0x3a4a6a, under: 0x2a2a3a, gold: 0x888888, skin: 0xc09070, hair: 0x3a2a1a, boots: 0x202025 },
 };
+export const CHAR_HEIGHT = { dredd: 2.15, default: 2.1 }; // rig head-centre height per unit scale (see hit spheres)
 
 export class Character {
   constructor(styleName = 'thug', opts = {}) {
     const st = { ...STYLES[styleName], ...opts };
     this.style = st; this.styleName = styleName;
-    const b = st.bulk, S = st.scale;
+    const S = st.scale;
     this.root = new THREE.Group();
     this.pivot = new THREE.Group(); this.pivot.position.y = 0.9 * S; this.root.add(this.pivot);
     this.rigRoot = new THREE.Group(); this.rigRoot.position.y = -0.9 * S; this.pivot.add(this.rigRoot);
     this.rigRoot.scale.setScalar(S);
     this.roll = 0;
+    // ---- joint hierarchy (animation drives these) ----
     this.hips = new THREE.Group(); this.hips.position.y = 1.0; this.rigRoot.add(this.hips);
-    const armor = mat(st.armor, { roughness: 0.45, metalness: 0.5 });
-    const under = mat(st.under, { roughness: 0.8, metalness: 0.1 });
-    const gold = mat(st.gold, { roughness: 0.42, metalness: 0.5, emissive: st.eagle ? 0x4a3208 : 0x000000, emissiveIntensity: 0.9 });
-    const skin = mat(st.skin, { roughness: 0.7, metalness: 0 });
-    const boots = mat(st.boots, { roughness: 0.4, metalness: 0.4 });
-    this.mats = { armor, under, gold, skin, boots };
-
-    // pelvis
-    this.hips.add(box(0.5 * b, 0.24, 0.3 * b, under, 0, 0, 0));
-    // torso: tapered V — broad shoulders over a narrower waist
     this.torso = new THREE.Group(); this.torso.position.y = 0.1; this.hips.add(this.torso);
-    this.torso.add(box(0.5 * b, 0.26, 0.3 * b, under, 0, 0.1, 0));                       // abdomen
-    this.torso.add(box(0.7 * b, 0.4, 0.38 * b, armor, 0, 0.45, 0));                      // chest
-    this.torso.add(box(0.78 * b, 0.1, 0.36 * b, armor, 0, 0.66, -0.01));                 // shoulder yoke
-    this.torso.add(box(0.5 * b, 0.22, 0.08, mat(0x050507, { roughness: 0.3, metalness: 0.6 }), 0, 0.46, 0.2 * b)); // chest plate
-    this.torso.add(box(0.5 * b, 0.4, 0.1, mat(0x0a0a0d, { roughness: 0.5, metalness: 0.5 }), 0, 0.45, -0.21 * b)); // back armour
-    // belt
-    const belt = box(0.58 * b, 0.1, 0.34 * b, mat(st.belt ?? 0x2a2a30), 0, 0.0, 0); this.hips.add(belt);
-    if (st.eagle) {
-      this.hips.add(box(0.15, 0.11, 0.04, gold, 0, 0.0, 0.18 * b));
-      for (const x of [-0.2, 0.2]) this.hips.add(box(0.1, 0.12, 0.08, under, x * b, 0.0, 0.18 * b));
-      // badge on the chest (gold eagle shield)
-      const bd = makeEagle(gold, 0.2, 0.02); bd.position.set(0.17 * b, 0.55, 0.21 * b); bd.rotation.z = 0.0; this.torso.add(bd);
-      // thigh holster
-      this.hips.add(box(0.1, 0.22, 0.1, under, -0.3 * b, -0.25, 0.0));
-    }
-    // neck/head
     this.neck = new THREE.Group(); this.neck.position.set(0, 0.8, 0); this.torso.add(this.neck);
     this.head = new THREE.Group(); this.head.position.y = 0.05; this.neck.add(this.head);
-    this.headMeshes = [];
-    if (st.eagle) { // Judge helmet — big dome, T-visor, jutting chin guard, grim mouth
-      const hel = mat(st.helmet, { roughness: 0.28, metalness: 0.6 });
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.235, 18, 14), hel); dome.position.y = 0.16; dome.scale.set(1.08, 1.0, 1.12); dome.castShadow = true;
-      this.head.add(dome);
-      this.head.add(box(0.06, 0.1, 0.4, hel, 0, 0.37, -0.02));                              // crest
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.1), mat(0x5a3c0c, { roughness: 0.12, metalness: 0.9, emissive: st.visor, emissiveIntensity: 0.3 }));
-      visor.position.set(0, 0.19, 0.2); this.head.add(visor);
-      this.head.add(box(0.5, 0.06, 0.16, hel, 0, 0.27, 0.15));                              // brow
-      this.head.add(box(0.07, 0.13, 0.08, mat(0x5a3c0c, { roughness: 0.2, metalness: 0.8, emissive: st.visor, emissiveIntensity: 0.25 }), 0, 0.12, 0.23)); // T-stem
-      this.head.add(box(0.4, 0.2, 0.22, hel, 0, -0.04, 0.1));                               // chin guard
-      this.head.add(box(0.34, 0.07, 0.1, skin, 0, 0.05, 0.19));                             // jaw
-      this.head.add(box(0.2, 0.014, 0.012, mat(0x000000), 0, 0.06, 0.245));                 // scowl
-      for (const x of [-0.23, 0.23]) this.head.add(box(0.05, 0.3, 0.34, hel, x, 0.1, 0.0)); // cheek plates
-      this.head.add(box(0.44, 0.16, 0.12, hel, 0, 0.02, -0.14));                            // neck guard
-    } else {
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), skin); head.position.y = 0.18; head.castShadow = true; this.head.add(head);
-      if (st.hair !== undefined) { const hair = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(st.hair, { roughness: 0.9, metalness: 0 })); hair.position.y = 0.2; hair.scale.y = 1.1; this.head.add(hair); }
-      if (st.helmetCol) { const h = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), mat(st.helmetCol, { roughness: 0.2, metalness: 0.8 })); h.position.y = 0.19; h.scale.set(1, 0.95, 1.05); this.head.add(h); this.head.add(box(0.28, 0.07, 0.1, mat(0x111111, { roughness: 0.1, metalness: 1 }), 0, 0.18, 0.17)); }
-      if (st.mask) { const m = box(0.26, 0.1, 0.06, mat(st.mask), 0, 0.1, 0.15); this.head.add(m); }
-      if (styleName === 'junkie') { const g = box(0.05, 0.3, 0.05, mat(0x80ff40, { emissive: 0x80ff40, emissiveIntensity: 1 }), 0, 0.4, 0); this.head.add(g); }
-    }
-    this.neck.add(box(0.16, 0.1, 0.16, under, 0, 0, 0));
-
-    // arms
-    const mkArm = (side) => {
-      const sx = side === 'L' ? 1 : -1;
-      const sh = new THREE.Group(); sh.position.set(sx * 0.46 * b, 0.63, 0); this.torso.add(sh);
-      sh.add(limb(0.38, 0.075 * b, 0.065 * b, armor));
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.09 * b, 8, 8), under); sh.add(ball);
+    const mkArm = (sx) => {
+      const sh = new THREE.Group(); sh.rotation.order = 'YXZ'; this.torso.add(sh);
       const el = new THREE.Group(); el.position.y = -0.38; sh.add(el);
-      el.add(limb(0.36, 0.065 * b, 0.055 * b, st.eagle ? gold : under));
-      if (st.eagle) { const pad = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), gold); pad.position.set(0, 0, 0); el.add(pad); }
       const hand = new THREE.Group(); hand.position.y = -0.38; el.add(hand);
-      const fist = box(0.1, 0.12, 0.12, st.eagle ? mat(0x111111, { roughness: 0.6 }) : skin, 0, -0.04, 0); hand.add(fist);
-      // pauldron
-      if (st.pauldron || st.plates !== undefined) {
-        const pr = (st.pauldron ? 0.2 : 0.17) * b;
-        const pg = new THREE.SphereGeometry(pr, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.62);
-        const pm = new THREE.Mesh(pg, st.pauldron ? gold : mat(st.plates, { roughness: 0.4, metalness: 0.6 })); pm.position.set(sx * 0.04, 0.02, 0); pm.rotation.z = -sx * 0.3; pm.scale.set(1.15, 0.95, 1.15); pm.castShadow = true; sh.add(pm);
-        if (st.pauldron && side === 'L') { // eagle emblem on the left pauldron
-          const eg = makeEagle(mat(0x14110a, { roughness: 0.5, metalness: 0.4 }), 0.3, 0.015);
-          eg.position.set(sx * 0.27, 0.1, 0.0); eg.rotation.set(Math.PI / 2 - 0.2, 0, 0); eg.rotation.order = 'ZXY'; eg.rotation.z = -Math.PI / 2 + 0.0; sh.add(eg);
-        }
-      }
       return { sh, el, hand };
     };
-    const aL = mkArm('L'), aR = mkArm('R');
-    aL.sh.rotation.order = 'YXZ'; aR.sh.rotation.order = 'YXZ';
-    this.shL = aL.sh; this.elL = aL.el; this.handL = aL.hand;
-    this.shR = aR.sh; this.elR = aR.el; this.handR = aR.hand;
-
-    // legs
-    const mkLeg = (side) => {
-      const sx = side === 'L' ? 1 : -1;
-      const hp = new THREE.Group(); hp.position.set(sx * 0.17 * b, -0.08, 0); this.hips.add(hp);
-      hp.add(limb(0.5, 0.1 * b, 0.08 * b, armor));
-      const kn = new THREE.Group(); kn.position.y = -0.5; hp.add(kn);
-      kn.add(limb(0.5, 0.08 * b, 0.065 * b, boots));
-      const pad = box(0.14 * b, 0.14, 0.08, st.eagle ? gold : armor, 0, 0, 0.07); kn.add(pad);
-      const foot = box(0.15 * b, 0.12, 0.32, boots, 0, -0.5, 0.07); kn.add(foot);
-      return { hp, kn };
-    };
-    const lL = mkLeg('L'), lR = mkLeg('R');
+    const aL = mkArm(1), aR = mkArm(-1);
+    this.shL = aL.sh; this.elL = aL.el; this.handL = aL.hand; this.shR = aR.sh; this.elR = aR.el; this.handR = aR.hand;
+    const mkLeg = () => { const hp = new THREE.Group(); hp.rotation.order = 'YXZ'; this.hips.add(hp); const kn = new THREE.Group(); kn.position.y = -0.46; hp.add(kn); return { hp, kn }; };
+    const lL = mkLeg(), lR = mkLeg();
     this.hipL = lL.hp; this.knL = lL.kn; this.hipR = lR.hp; this.knR = lR.kn;
+    buildBody(this, styleName, st);
 
     // weapon anchors
     this.gunMount = new THREE.Group(); this.gunMount.rotation.x = deg(90); this.handR.add(this.gunMount);
-    this.batonMount = new THREE.Group(); this.handL.add(this.batonMount);
-    this.toolR = new THREE.Group(); this.handR.add(this.toolR);
+    this.gunMount.position.y = -0.1;
+    this.batonMount = new THREE.Group(); this.batonMount.position.y = -0.1; this.handL.add(this.batonMount);
+    this.toolR = new THREE.Group(); this.toolR.position.y = -0.1; this.handR.add(this.toolR);
 
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
 
@@ -267,6 +186,20 @@ export class Character {
     this.breath = Math.random() * 6;
     this.stepFoot = 0;
     this.rollT = -1;
+  }
+
+  // write a pose-array set onto the joint groups
+  applyPose(cur) {
+    this.hips.position.set(cur.pos[0], 1.0 + cur.pos[1], cur.pos[2]);
+    this.hips.rotation.set(cur.hips[0], cur.hips[1], cur.hips[2]);
+    this.rigRoot.rotation.set(cur.root[0], cur.root[1], cur.root[2]);
+    this.pivot.rotation.x = this.roll;
+    this.torso.rotation.set(cur.torso[0], cur.torso[1], cur.torso[2]);
+    this.head.rotation.set(cur.head[0], cur.head[1] - cur.torso[1] * 0.5 - cur.hips[1] * 0.4, cur.head[2]);
+    this.shL.rotation.set(cur.shL[0], cur.shL[1], cur.shL[2]); this.shR.rotation.set(cur.shR[0], cur.shR[1], cur.shR[2]);
+    this.elL.rotation.set(cur.elL[0], 0, 0); this.elR.rotation.set(cur.elR[0], 0, 0);
+    this.hipL.rotation.set(cur.hipL[0], cur.hipL[1], cur.hipL[2]); this.hipR.rotation.set(cur.hipR[0], cur.hipR[1], cur.hipR[2]);
+    this.knL.rotation.set(Math.abs(cur.knL[0]), 0, 0); this.knR.rotation.set(Math.abs(cur.knR[0]), 0, 0);
   }
 
   play(name, { speed = 1, hold = false } = {}) {
@@ -364,17 +297,7 @@ export class Character {
       if (k >= 1 && !this.clipDone) { this.clipDone = true; this.events.push('done'); if (!this.clipHold) { this.clip = null; } }
     }
     // --- apply ---
-    this.hips.position.set(cur.pos[0], 1.0 + cur.pos[1], cur.pos[2]);
-    this.hips.rotation.set(cur.hips[0], cur.hips[1], cur.hips[2]);
-    this.rigRoot.rotation.set(cur.root[0], cur.root[1], cur.root[2]);
-    this.pivot.rotation.x = this.roll;
-    this.torso.rotation.set(cur.torso[0], cur.torso[1], cur.torso[2]);
-    this.head.rotation.set(cur.head[0], cur.head[1] - cur.torso[1] * 0.5 - cur.hips[1] * 0.4, cur.head[2]);
-    this.shL.rotation.set(cur.shL[0], cur.shL[1], cur.shL[2]); this.shR.rotation.set(cur.shR[0], cur.shR[1], cur.shR[2]);
-    this.elL.rotation.set(cur.elL[0], 0, 0); this.elR.rotation.set(cur.elR[0], 0, 0);
-    this.hipL.rotation.set(cur.hipL[0], cur.hipL[1], cur.hipL[2]); this.hipR.rotation.set(cur.hipR[0], cur.hipR[1], cur.hipR[2]);
-    this.knL.rotation.set(Math.abs(cur.knL[0]), 0, 0); this.knR.rotation.set(Math.abs(cur.knR[0]), 0, 0);
-    // foot-ground: keep feet near floor when knees bent (lower hips)
+    this.applyPose(cur);
     // footstep events
     if (walkStep(this, sp)) this.events.push('step');
     return this.events;

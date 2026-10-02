@@ -60,10 +60,10 @@ export class Enemy {
     else if (T.weapon === 'bat') { this.weapon = makeBat(T.boss ? 0x2a2a2a : 0x6a4a2a, 0.9); this.weapon.scale.setScalar(T.scaleWeapon || 1); this.ch.toolR.add(this.weapon); }
     // alert sprite
     this.alert = new THREE.Sprite(new THREE.SpriteMaterial({ map: alertTex, depthTest: false, transparent: true, toneMapped: false }));
-    this.alert.scale.setScalar(0.8); this.alert.position.y = 2.6 * this.scale; this.alert.visible = false; this.alert.renderOrder = 20;
+    this.alert.scale.setScalar(0.8); this.alert.position.y = 3.0 * this.scale; this.alert.visible = false; this.alert.renderOrder = 20;
     this.ch.root.add(this.alert);
     this.marker = new THREE.Sprite(new THREE.SpriteMaterial({ map: judgeTex, depthTest: false, transparent: true, toneMapped: false }));
-    this.marker.scale.setScalar(0.95); this.marker.position.y = 2.4 * this.scale; this.marker.visible = false; this.marker.renderOrder = 20;
+    this.marker.scale.setScalar(0.95); this.marker.position.y = 3.0 * this.scale; this.marker.visible = false; this.marker.renderOrder = 20;
     this.ch.root.add(this.marker);
     G.scene.add(this.ch.root);
     this.sync();
@@ -83,18 +83,18 @@ export class Enemy {
     if (this.removed) return null;
     const s = this.scale, p = this.pos;
     if (this.state === 'dead' || this.state === 'subdued' || this.state === 'down') {
-      const t = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 0.35, p.z, 0.8 * s);
+      const t = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 0.45 * s, p.z, 0.95 * s);
       return t === null ? null : { t, head: false };
     }
-    const th = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.72 * s, p.z, 0.27 * s);
-    const kneel = this.state === 'surrender' ? 0.6 : 1;
-    const tb = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.0 * s * kneel, p.z, 0.58 * s);
-    if (th !== null && (tb === null || th <= tb + 0.02)) return { t: th, head: this.state !== 'surrender' ? true : true };
+    const ky = this.state === 'surrender' ? -0.62 * s : 0;
+    const th = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 2.13 * s + ky, p.z, 0.29 * s);
+    const tb = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.5 * s + ky, p.z, 0.64 * s);
+    if (th !== null && (tb === null || th <= tb + 0.02)) return { t: th, head: true };
     if (tb !== null) return { t: tb, head: false };
     return null;
   }
 
-  centre(out = _v) { return out.set(this.pos.x, this.pos.y + 1.0 * this.scale, this.pos.z); }
+  centre(out = _v) { return out.set(this.pos.x, this.pos.y + (this.state === 'surrender' ? 0.9 : 1.5) * this.scale, this.pos.z); }
 
   setState(s, t = 0) {
     if (this.state === 'telegraph' || this.state === 'attack') this.releaseToken();
@@ -127,7 +127,7 @@ export class Enemy {
     if (info.knock) { this.vel.addScaledVector(info.dir || _v.set(0, 0, 0), info.knock); }
     if (type === 'fire') { this.burn = 2; return this.afterDamage(type, info); }
     if (G.hud && type !== 'fire') G.hud.damageNumber?.(this, dmg);
-    fx.text(this.centre().clone().setY(this.pos.y + 2.2 * this.scale), String(Math.round(dmg)), info.crit ? 'crit' : '');
+    fx.text(this.centre().clone().setY(this.pos.y + 2.6 * this.scale), String(Math.round(dmg)), info.crit ? 'crit' : '');
     this.afterDamage(type, info);
     if (type !== 'fire' && this.state !== 'dead') this.setFlash(0.0);
   }
@@ -282,7 +282,7 @@ export class Enemy {
       case 'getup': { if (this.stateT > 0.55) this.setState('engage'); break; }
       case 'surrender': case 'subdued': {
         this.walking = 0;
-        this.marker.position.y = (this.state === 'surrender' ? 1.8 : 1.1) * this.scale + 0.7 + Math.sin(G.time * 3) * 0.08;
+        this.marker.position.y = (this.state === 'surrender' ? 2.3 : 1.2) * this.scale + 0.5 + Math.sin(G.time * 3) * 0.08;
         this.marker.material.opacity = 0.7 + 0.3 * Math.sin(G.time * 5);
         break;
       }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeCanvas, canvasTex, rand, pick, mulberry32 } from './util.js';
+import { makeCanvas, canvasTex, rand, pick, mulberry32, normalFromHeight } from './util.js';
 
 // All textures are drawn procedurally onto canvases.
 
@@ -73,81 +73,142 @@ export function makeFacade(variant) {
 }
 
 // ---------- road / sidewalk ----------
+// 1024px tileable asphalt (22 m x 22 m): aggregate, cracks, patches, tracks, oil, manholes,
+// worn markings.  Returns albedo + roughness (puddles) + normal maps.
 export function makeRoad() {
-  const W = 512, H = 512;
-  const [c, x] = makeCanvas(W, H);
-  const [r, rx] = makeCanvas(W, H);
-  noiseFill(x, W, H, 12, [20, 21, 27]);
-  // tire tracks
-  for (const u of [0.27, 0.73, 0.38, 0.62]) {
-    const g = x.createLinearGradient((u - 0.06) * W, 0, (u + 0.06) * W, 0);
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.5, 'rgba(0,0,0,0.28)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-    x.fillStyle = g; x.fillRect((u - 0.06) * W, 0, 0.12 * W, H);
-  }
-  rx.fillStyle = 'rgb(115,115,115)'; rx.fillRect(0, 0, W, H);
-  for (const u of [0.27, 0.73]) {
-    const g = rx.createLinearGradient((u - 0.06) * W, 0, (u + 0.06) * W, 0);
-    g.addColorStop(0, 'rgba(40,40,40,0)'); g.addColorStop(0.5, 'rgba(40,40,40,0.8)'); g.addColorStop(1, 'rgba(40,40,40,0)');
-    rx.fillStyle = g; rx.fillRect((u - 0.06) * W, 0, 0.12 * W, H);
-  }
-  // puddles
+  const W = 1024;
+  const [c, x] = makeCanvas(W, W);
+  const [r, rx] = makeCanvas(W, W);
+  const [hc, hx] = makeCanvas(W, W);
   const rng = mulberry32(7);
-  for (let i = 0; i < 16; i++) {
-    const px = rng() * W, py = rng() * H, pr = 20 + rng() * 50;
-    for (const [dx, dy] of [[0, 0], [-W, 0], [W, 0], [0, -H], [0, H]]) {
-      const g = rx.createRadialGradient(px + dx, py + dy, 0, px + dx, py + dy, pr);
-      g.addColorStop(0, 'rgba(0,0,0,0.95)'); g.addColorStop(0.7, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      rx.fillStyle = g; rx.fillRect(px + dx - pr, py + dy - pr, pr * 2, pr * 2);
-      const g2 = x.createRadialGradient(px + dx, py + dy, 0, px + dx, py + dy, pr);
-      g2.addColorStop(0, 'rgba(0,0,0,0.5)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
-      x.fillStyle = g2; x.fillRect(px + dx - pr, py + dy - pr, pr * 2, pr * 2);
-    }
+  noiseFill(x, W, W, 14, [24, 25, 31]);
+  hx.fillStyle = 'rgb(128,128,128)'; hx.fillRect(0, 0, W, W);
+  // aggregate speckle
+  for (let i = 0; i < 40000; i++) {
+    const px = rng() * W, py = rng() * W, l = rng() < 0.5 ? 0 : 255;
+    x.fillStyle = `rgba(${l},${l},${l},${0.04 + rng() * 0.08})`; x.fillRect(px, py, 1 + (rng() * 2 | 0), 1 + (rng() * 2 | 0));
+    hx.fillStyle = `rgba(${l},${l},${l},0.07)`; hx.fillRect(px, py, 2, 2);
   }
-  // markings
-  x.fillStyle = '#cfa62a';
-  x.fillRect(W * 0.5 - 9, 0, 4, H); x.fillRect(W * 0.5 + 5, 0, 4, H);
-  x.fillStyle = 'rgba(225,225,230,0.85)';
-  for (const u of [0.25, 0.75]) for (let y = 0; y < H; y += 128) x.fillRect(u * W - 3, y + 16, 6, 64);
-  x.fillRect(W * 0.045, 0, 6, H); x.fillRect(W * 0.955 - 6, 0, 6, H);
-  // markings are less glossy
-  rx.fillStyle = 'rgba(200,200,200,0.9)';
-  rx.fillRect(W * 0.5 - 9, 0, 4, H); rx.fillRect(W * 0.5 + 5, 0, 4, H);
-  for (const u of [0.25, 0.75]) for (let y = 0; y < H; y += 128) rx.fillRect(u * W - 3, y + 16, 6, 64);
-  rx.fillRect(W * 0.045, 0, 6, H); rx.fillRect(W * 0.955 - 6, 0, 6, H);
-  return [canvasTex(c, { repeat: true }), canvasTex(r, { repeat: true, srgb: false })];
+  // patched repairs
+  for (let i = 0; i < 7; i++) {
+    const px = rng() * (W - 200), py = rng() * (W - 300), pw = 90 + rng() * 140, ph = 120 + rng() * 200, t = (rng() - 0.5) * 14;
+    x.fillStyle = `rgba(${t > 0 ? 70 : 0},${t > 0 ? 70 : 0},${t > 0 ? 76 : 0},0.28)`; x.fillRect(px, py, pw, ph);
+    x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 3; x.strokeRect(px, py, pw, ph);
+    hx.fillStyle = 'rgba(150,150,150,0.5)'; hx.fillRect(px, py, pw, ph); hx.strokeStyle = 'rgb(70,70,70)'; hx.lineWidth = 3; hx.strokeRect(px, py, pw, ph);
+  }
+  // tire tracks
+  for (const u of [0.27, 0.73, 0.4, 0.6]) {
+    const g = x.createLinearGradient((u - 0.06) * W, 0, (u + 0.06) * W, 0);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.5, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect((u - 0.06) * W, 0, 0.12 * W, W);
+  }
+  // oil drips
+  for (let i = 0; i < 10; i++) {
+    const px = (0.2 + rng() * 0.6) * W, py = rng() * W, pr = 8 + rng() * 22;
+    const g = x.createRadialGradient(px, py, 0, px, py, pr); g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+  }
+  // cracks
+  x.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    let px = rng() * W, py = rng() * W, a = rng() * 6.28;
+    x.strokeStyle = 'rgba(0,0,0,0.6)'; x.lineWidth = 1.5; hx.strokeStyle = 'rgb(40,40,40)'; hx.lineWidth = 2;
+    x.beginPath(); hx.beginPath(); x.moveTo(px, py); hx.moveTo(px, py);
+    for (let k = 0; k < 14; k++) { a += (rng() - 0.5) * 1.1; px += Math.cos(a) * 16; py += Math.sin(a) * 16; x.lineTo(px, py); hx.lineTo(px, py); }
+    x.stroke(); hx.stroke();
+  }
+  // roughness: polished tracks, wet puddles
+  rx.fillStyle = 'rgb(255,140,0)'; rx.fillRect(0, 0, W, W);
+  const gloss = (cx, cy, rw, rh, a0, a1) => {
+    for (const [dx, dy] of [[0, 0], [-W, 0], [W, 0], [0, -W], [0, W]]) {
+      rx.save(); rx.translate(cx + dx, cy + dy); rx.scale(1, rh / rw);
+      const g = rx.createRadialGradient(0, 0, 0, 0, 0, rw); g.addColorStop(0, `rgba(0,0,0,${a0})`); g.addColorStop(0.7, `rgba(0,0,0,${a1})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      rx.fillStyle = g; rx.fillRect(-rw, -rw, rw * 2, rw * 2); rx.restore();
+      x.save(); x.translate(cx + dx, cy + dy); x.scale(1, rh / rw);
+      const g2 = x.createRadialGradient(0, 0, 0, 0, 0, rw); g2.addColorStop(0, 'rgba(0,0,0,0.38)'); g2.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g2; x.fillRect(-rw, -rw, rw * 2, rw * 2); x.restore();
+    }
+  };
+  for (const u of [0.27, 0.73]) for (let k = 0; k < 4; k++) gloss(u * W + (rng() - 0.5) * 20, (k + rng() * 0.5) * (W / 4), 55 + rng() * 25, 120 + rng() * 80, 0.55, 0.3);
+  for (let i = 0; i < 18; i++) gloss(rng() * W, rng() * W, 28 + rng() * 60, 45 + rng() * 120, 0.97, 0.62);
+  // manhole covers
+  for (const [u, v] of [[0.63, 0.33], [0.31, 0.82]]) {
+    const px = u * W, py = v * W;
+    x.fillStyle = '#2a2b31'; x.beginPath(); x.arc(px, py, 26, 0, 7); x.fill();
+    x.strokeStyle = '#4a4c55'; x.lineWidth = 3; x.beginPath(); x.arc(px, py, 26, 0, 7); x.stroke(); x.beginPath(); x.arc(px, py, 15, 0, 7); x.stroke();
+    for (let k = 0; k < 8; k++) { x.beginPath(); x.moveTo(px - 22, py - 14 + k * 4); x.lineTo(px + 22, py - 14 + k * 4); x.lineWidth = 1; x.stroke(); }
+    hx.fillStyle = 'rgb(105,105,105)'; hx.beginPath(); hx.arc(px, py, 28, 0, 7); hx.fill(); hx.fillStyle = 'rgb(150,150,150)'; hx.beginPath(); hx.arc(px, py, 24, 0, 7); hx.fill();
+    rx.fillStyle = 'rgb(255,95,0)'; rx.beginPath(); rx.arc(px, py, 26, 0, 7); rx.fill();
+  }
+  // gutter drains near the kerb edges
+  for (const [u, v] of [[0.025, 0.2], [0.975, 0.62], [0.025, 0.9]]) {
+    const px = u * W - 18, py = v * W - 28; x.fillStyle = '#17181c'; x.fillRect(px, py, 36, 56);
+    for (let k = 4; k < 52; k += 8) { x.fillStyle = '#3a3c44'; x.fillRect(px + 2, py + k, 32, 3); }
+    hx.fillStyle = 'rgb(70,70,70)'; hx.fillRect(px, py, 36, 56);
+  }
+  // markings: centre double yellow, dashed white lane lines, solid edge lines — worn
+  x.fillStyle = '#cfa62a'; x.fillRect(W * 0.5 - 18, 0, 8, W); x.fillRect(W * 0.5 + 10, 0, 8, W);
+  x.fillStyle = 'rgba(228,228,234,0.88)';
+  for (const u of [0.25, 0.75]) for (let y = 0; y < W; y += 256) x.fillRect(u * W - 6, y + 32, 12, 128);
+  x.fillRect(W * 0.045, 0, 12, W); x.fillRect(W * 0.955 - 12, 0, 12, W);
+  for (const u of [0.5, 0.25, 0.75, 0.045, 0.955]) hx.fillStyle = 'rgb(138,138,138)';
+  rx.fillStyle = 'rgb(255,215,0)';
+  rx.fillRect(W * 0.5 - 18, 0, 8, W); rx.fillRect(W * 0.5 + 10, 0, 8, W);
+  for (const u of [0.25, 0.75]) for (let y = 0; y < W; y += 256) rx.fillRect(u * W - 6, y + 32, 12, 128);
+  rx.fillRect(W * 0.045, 0, 12, W); rx.fillRect(W * 0.955 - 12, 0, 12, W);
+  // wear: erase marking bits with asphalt
+  for (let i = 0; i < 500; i++) { x.fillStyle = `rgba(26,27,33,${0.25 + rng() * 0.4})`; x.fillRect(W * (rng() < 0.5 ? 0.5 + (rng() - 0.5) * 0.06 : rng() < 0.5 ? 0.25 : 0.75) + (rng() - 0.5) * 20, rng() * W, 3 + rng() * 9, 3 + rng() * 14); }
+  return [canvasTex(c, { repeat: true }), canvasTex(r, { repeat: true, srgb: false }), canvasTex(normalFromHeight(hc, 2.2), { repeat: true, srgb: false })];
 }
 
 export function makeIntersection() {
-  const W = 512, H = 512;
-  const [c, x] = makeCanvas(W, H);
-  const [r, rx] = makeCanvas(W, H);
-  noiseFill(x, W, H, 12, [20, 21, 27]);
-  rx.fillStyle = 'rgb(105,105,105)'; rx.fillRect(0, 0, W, H);
+  const W = 1024;
+  const [c, x] = makeCanvas(W, W);
+  const [r, rx] = makeCanvas(W, W);
+  const [hc, hx] = makeCanvas(W, W);
   const rng = mulberry32(11);
-  for (let i = 0; i < 8; i++) {
-    const px = rng() * W, py = rng() * H, pr = 25 + rng() * 55;
-    const g = rx.createRadialGradient(px, py, 0, px, py, pr);
-    g.addColorStop(0, 'rgba(0,0,0,0.95)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  noiseFill(x, W, W, 14, [24, 25, 31]);
+  hx.fillStyle = 'rgb(128,128,128)'; hx.fillRect(0, 0, W, W);
+  for (let i = 0; i < 40000; i++) { const px = rng() * W, py = rng() * W, l = rng() < 0.5 ? 0 : 255; x.fillStyle = `rgba(${l},${l},${l},${0.04 + rng() * 0.08})`; x.fillRect(px, py, 2, 2); hx.fillStyle = `rgba(${l},${l},${l},0.18)`; hx.fillRect(px, py, 2, 2); }
+  rx.fillStyle = 'rgb(255,120,0)'; rx.fillRect(0, 0, W, W);
+  // swirl tyre marks and puddles
+  for (let i = 0; i < 26; i++) {
+    const px = rng() * W, py = rng() * W, pr = 30 + rng() * 80;
+    const g = rx.createRadialGradient(px, py, 0, px, py, pr); g.addColorStop(0, 'rgba(0,0,0,0.97)'); g.addColorStop(0.65, 'rgba(0,0,0,0.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     rx.fillStyle = g; rx.fillRect(px - pr, py - pr, pr * 2, pr * 2);
+    const g2 = x.createRadialGradient(px, py, 0, px, py, pr); g2.addColorStop(0, 'rgba(0,0,0,0.4)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g2; x.fillRect(px - pr, py - pr, pr * 2, pr * 2);
   }
-  x.fillStyle = 'rgba(230,230,235,0.8)';
-  rx.fillStyle = 'rgba(210,210,210,0.9)';
-  const band = 70;
+  x.strokeStyle = 'rgba(0,0,0,0.28)'; x.lineWidth = 16; x.lineCap = 'round';
+  for (let i = 0; i < 10; i++) { x.beginPath(); const cx0 = rng() * W, cy0 = rng() * W, rr = 120 + rng() * 280; x.arc(cx0, cy0, rr, rng() * 6, rng() * 6 + 1.2); x.stroke(); }
+  // crosswalks (zebra) and stop lines
+  const band = 140;
+  x.fillStyle = 'rgba(232,232,238,0.86)'; rx.fillStyle = 'rgb(255,200,0)'; hx.fillStyle = 'rgb(138,138,138)';
   for (let i = 0; i < 12; i++) {
-    const p = 40 + i * 36;
-    for (const f of [(ctx) => ctx.fillRect(p, 8, 20, band - 12), (ctx) => ctx.fillRect(p, H - band + 4, 20, band - 12),
-      (ctx) => ctx.fillRect(8, p, band - 12, 20), (ctx) => ctx.fillRect(W - band + 4, p, band - 12, 20)]) { f(x); f(rx); }
+    const p = 80 + i * 72;
+    for (const f of [(ctx) => ctx.fillRect(p, 16, 38, band - 28), (ctx) => ctx.fillRect(p, W - band + 12, 38, band - 28), (ctx) => ctx.fillRect(16, p, band - 28, 38), (ctx) => ctx.fillRect(W - band + 12, p, band - 28, 38)]) { f(x); f(rx); f(hx); }
   }
-  return [canvasTex(c, { repeat: true }), canvasTex(r, { repeat: true, srgb: false })];
+  for (let i = 0; i < 400; i++) { x.fillStyle = `rgba(26,27,33,${0.25 + rng() * 0.4})`; x.fillRect(rng() * W, (rng() < 0.5 ? 16 + rng() * 100 : W - 120 + rng() * 100), 3 + rng() * 12, 3 + rng() * 10); }
+  return [canvasTex(c, { repeat: true }), canvasTex(r, { repeat: true, srgb: false }), canvasTex(normalFromHeight(hc, 2.2), { repeat: true, srgb: false })];
 }
 
+// paving slabs (2 m) with seams, tonal variation, grime and a rubber-kerb edge feel
 export function makeSidewalk() {
-  const W = 256;
-  const [c, x] = makeCanvas(W, W);
-  noiseFill(x, W, W, 14, [46, 46, 54]);
-  x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 3;
-  for (let i = 0; i <= 4; i++) { x.beginPath(); x.moveTo(i * 64, 0); x.lineTo(i * 64, W); x.stroke(); x.beginPath(); x.moveTo(0, i * 64); x.lineTo(W, i * 64); x.stroke(); }
-  return canvasTex(c, { repeat: true });
+  const W = 512;
+  const [c, x] = makeCanvas(W, W); const [hc, hx] = makeCanvas(W, W); const [r, rx] = makeCanvas(W, W);
+  const rng = mulberry32(21);
+  hx.fillStyle = 'rgb(150,150,150)'; hx.fillRect(0, 0, W, W);
+  rx.fillStyle = 'rgb(255,150,0)'; rx.fillRect(0, 0, W, W);
+  const slab = W / 4;
+  for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
+    const t = 44 + (rng() - 0.5) * 16;
+    x.fillStyle = `rgb(${t},${t},${t + 8})`; x.fillRect(i * slab, j * slab, slab, slab);
+    for (let k = 0; k < 500; k++) { x.fillStyle = `rgba(${rng() < 0.5 ? 0 : 255},${rng() < 0.5 ? 0 : 255},${rng() < 0.5 ? 0 : 255},0.05)`; x.fillRect(i * slab + rng() * slab, j * slab + rng() * slab, 2, 2); }
+    const g = rx.createRadialGradient(i * slab + rng() * slab, j * slab + rng() * slab, 0, i * slab + slab / 2, j * slab + slab / 2, slab * 0.6); g.addColorStop(0, `rgba(0,0,0,${0.3 + rng() * 0.5})`); g.addColorStop(1, 'rgba(0,0,0,0)'); rx.fillStyle = g; rx.fillRect(i * slab, j * slab, slab, slab);
+  }
+  x.strokeStyle = 'rgba(0,0,0,0.65)'; x.lineWidth = 4; hx.strokeStyle = 'rgb(50,50,50)'; hx.lineWidth = 5;
+  for (let i = 0; i <= 4; i++) for (const ctx of [x, hx]) { ctx.beginPath(); ctx.moveTo(i * slab, 0); ctx.lineTo(i * slab, W); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, i * slab); ctx.lineTo(W, i * slab); ctx.stroke(); }
+  for (let i = 0; i < 8; i++) { x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.5; let px = rng() * W, py = rng() * W, a = rng() * 6.28; x.beginPath(); x.moveTo(px, py); for (let k = 0; k < 8; k++) { a += (rng() - 0.5); px += Math.cos(a) * 14; py += Math.sin(a) * 14; x.lineTo(px, py); } x.stroke(); }
+  return [canvasTex(c, { repeat: true }), canvasTex(r, { repeat: true, srgb: false }), canvasTex(normalFromHeight(hc, 2.0), { repeat: true, srgb: false })];
 }
 
 export function makeGrass() {

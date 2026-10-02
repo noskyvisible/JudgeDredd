@@ -87,3 +87,18 @@ export function segSphere(ax, ay, az, bx, by, bz, cx, cy, cz, r) {
   if (t < 0 || t > 1) return c < 0 ? 0 : null;
   return t;
 }
+
+// Height canvas -> tangent-space normal map canvas (tileable, OpenGL +Y up)
+export function normalFromHeight(Hc, strength = 2) {
+  const W = Hc.width, Hh = Hc.height;
+  const src = Hc.getContext('2d').getImageData(0, 0, W, Hh).data;
+  const [N, nx] = makeCanvas(W, Hh); const out = nx.createImageData(W, Hh); const d = out.data;
+  const H = new Float32Array(W * Hh); for (let i = 0; i < W * Hh; i++) H[i] = src[i * 4] / 255;
+  for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+    const xm = (x - 1 + W) % W, xp = (x + 1) % W, ym = (y - 1 + Hh) % Hh, yp = (y + 1) % Hh;
+    const dx = (H[y * W + xm] - H[y * W + xp]) * strength, dy = (H[yp * W + x] - H[ym * W + x]) * strength;
+    const l = Math.hypot(dx, dy, 1); const i = (y * W + x) * 4;
+    d[i] = (dx / l * 0.5 + 0.5) * 255; d[i + 1] = (dy / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+  }
+  nx.putImageData(out, 0, 0); return N;
+}

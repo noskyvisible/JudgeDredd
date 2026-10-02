@@ -160,3 +160,8 @@ button:hover:not(:disabled) { transform: scale(1.06); filter: brightness(1.15); 
 
 #fps { position: absolute; left: 50%; top: 24px; transform: translateX(-50%); font: 11px monospace; opacity: .6; display: none; }
 #fps.on { display: block; }
+
+#firehint { position: absolute; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); font: 900 15px Impact, 'Arial Black', sans-serif; letter-spacing: .22em; color: var(--gold); background: var(--bg); padding: 4px 14px; border: 1px solid rgba(255,210,74,.6); opacity: 0; transition: opacity .2s; white-space: nowrap; }
+#firehint.on { opacity: 1; }
+#gunkeys { position: absolute; right: 24px; bottom: 112px; font-size: 11px; letter-spacing: .12em; opacity: .55; text-align: right; }
+#crosshair.fired i { background: #ffd24a; }

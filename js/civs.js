@@ -45,8 +45,8 @@ export class Civilian {
     if (this.removed || !this.ch.root.visible) return null;
     const p = this.pos, s = this.scale;
     if (this.state === 'dead') return null;
-    const th = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.7 * s, p.z, 0.26 * s);
-    const tb = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.0 * s, p.z, 0.5 * s);
+    const th = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 2.13 * s, p.z, 0.27 * s);
+    const tb = segSphere(a.x, a.y, a.z, b.x, b.y, b.z, p.x, p.y + 1.45 * s, p.z, 0.55 * s);
     if (th !== null) return { t: th, head: true }; if (tb !== null) return { t: tb, head: false };
     return null;
   }

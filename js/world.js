@@ -5,6 +5,8 @@ import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { rand, randInt, pick, chance, clamp, mulberry32, segAABB, makeCanvas, canvasTex } from './util.js';
 import * as TX from './textures.js';
+import { makeFacadeSet } from './facades.js';
+import { patchWall, patchRoad } from './shaders.js';
 
 export const N = 15;            // blocks per side
 export const S = 100;           // block pitch
@@ -167,18 +169,41 @@ export const world = {
     const RP = (arr) => arr[Math.floor(rng() * arr.length)];
 
     // ===== environment map for neon reflections =====
+    // A little imaginary city ringed around the origin: dark towers with lit window grids and a few
+    // tall neon strips.  Baked to a PMREM so wet roads and glass reflect streaks of light, not blobs.
     const envScene = new THREE.Scene();
-    envScene.background = new THREE.Color(0x0b0714);
-    const envCols = [0xff2ea6, 0x40e0ff, 0xffa030, 0xffffff, 0x7a40ff, 0xff3030];
-    for (let i = 0; i < 24; i++) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(rand(6, 16), rand(4, 20)), new THREE.MeshBasicMaterial({ color: new THREE.Color(envCols[i % envCols.length]).multiplyScalar(rand(2, 6)), side: THREE.DoubleSide }));
-      const a = (i / 24) * Math.PI * 2; m.position.set(Math.cos(a) * 30, rand(-4, 22), Math.sin(a) * 30); m.lookAt(0, 4, 0); envScene.add(m);
+    envScene.background = new THREE.Color(0x0a0612);
+    const emat = (c, k) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), side: THREE.DoubleSide });
+    const darkMat = new THREE.MeshBasicMaterial({ color: 0x07050c });
+    const neonCols = [0xff2ea6, 0x40e0ff, 0xffa030, 0x7a40ff, 0xff3030, 0x30ffb0, 0xffd24a];
+    const winCols = [0xffd9a0, 0xffe9c0, 0x9fd4ff, 0xffb070, 0xff80d0];
+    const quadGeo = new THREE.PlaneGeometry(1, 1);
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * Math.PI * 2 + rand(-0.04, 0.04), r = rand(34, 70), h = rand(30, 95), bw = rand(9, 20);
+      const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(bw, h, bw), darkMat); body.position.set(cx, h / 2 - 6, cz); envScene.add(body);
+      const nx = -Math.cos(a), nz = -Math.sin(a); // inward normal
+      for (let row = 0; row < 9; row++) for (let col = 0; col < 4; col++) {
+        if (Math.random() > 0.38) continue;
+        const q = new THREE.Mesh(quadGeo, emat(winCols[(Math.random() * winCols.length) | 0], rand(1.2, 2.6)));
+        const off = (col - 1.5) * (bw / 4.4);
+        q.scale.set(bw / 6, 2.2, 1);
+        q.position.set(cx + nx * (bw / 2 + 0.05) + -nz * off, 2 + row * 4.2 + rand(0, 6), cz + nz * (bw / 2 + 0.05) + nx * off);
+        q.lookAt(q.position.x + nx, q.position.y, q.position.z + nz); envScene.add(q);
+      }
+      if (Math.random() < 0.4) {
+        const sh = h * rand(0.4, 0.85);
+        const s = new THREE.Mesh(quadGeo, emat(neonCols[(Math.random() * neonCols.length) | 0], rand(4, 8)));
+        s.scale.set(rand(0.7, 1.4), sh, 1); s.position.set(cx + nx * (bw / 2 + 0.1), sh / 2 - 4, cz + nz * (bw / 2 + 0.1)); s.lookAt(s.position.x + nx, s.position.y, s.position.z + nz); envScene.add(s);
+      }
     }
-    const top = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshBasicMaterial({ color: 0x2a1840 })); top.position.y = 40; top.rotation.x = Math.PI / 2; envScene.add(top);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(100, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x050308 })); ground.position.y = -6; envScene.add(ground);
+    const envSky = new THREE.Mesh(new THREE.SphereGeometry(95, 16, 8), new THREE.MeshBasicMaterial({ color: 0x2a1030, side: THREE.BackSide })); envScene.add(envSky);
     const pm = new THREE.PMREMGenerator(renderer);
-    scene.environment = pm.fromScene(envScene, 0.03).texture;
-    scene.environmentIntensity = 0.4;
+    scene.environment = pm.fromScene(envScene, 0.02).texture;
+    scene.environmentIntensity = 0.5;
     pm.dispose();
+    envScene.traverse((o) => { if (o.isMesh) { o.geometry.dispose?.(); } });
 
     // ===== sky & fog =====
     scene.background = new THREE.Color(0x120a1c);
@@ -205,8 +230,8 @@ export const world = {
     sky.renderOrder = -10; scene.add(sky); this.sky = sky;
 
     // ===== lights =====
-    this.hemi = new THREE.HemisphereLight(0x5a4a9a, 0x2a1a30, 0.55); scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0x8aa0ff, 0.9);
+    this.hemi = new THREE.HemisphereLight(0x5a4a9a, 0x2a1a30, 0.6); scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0x8aa0ff, 0.5);
     this.sun.position.set(-60, 120, -40);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -215,20 +240,30 @@ export const world = {
     scene.add(this.sun, this.sun.target);
 
     // ===== textures & materials =====
+    this.timeU = { value: 0 };
     const facMats = [0, 1, 2, 3].map((v) => {
-      const [map, em] = TX.makeFacade(v);
-      return new THREE.MeshStandardMaterial({ map, emissiveMap: em, emissive: 0xffffff, emissiveIntensity: [0.85, 0.95, 0.95, 0.85][v], roughness: 0.78, metalness: 0.25, vertexColors: true });
+      const s = makeFacadeSet(v);
+      const m = new THREE.MeshStandardMaterial({
+        map: s.map, emissiveMap: s.emissiveMap, emissive: 0xffffff, emissiveIntensity: [0.72, 0.8, 0.82, 0.7][v],
+        roughnessMap: s.ormMap, metalnessMap: s.ormMap, roughness: 1, metalness: 1, normalMap: s.normalMap, normalScale: new THREE.Vector2(0.9, 0.9),
+        vertexColors: true, envMapIntensity: 1.1,
+      });
+      return patchWall(m), m;
     });
-    const [roadMap, roadRough] = TX.makeRoad();
-    const roadMat = new THREE.MeshStandardMaterial({ map: roadMap, roughnessMap: roadRough, roughness: 1, metalness: 0.5, envMapIntensity: 1.6 });
-    const [intMap, intRough] = TX.makeIntersection();
-    const intMat = new THREE.MeshStandardMaterial({ map: intMap, roughnessMap: intRough, roughness: 1, metalness: 0.5, envMapIntensity: 1.6 });
-    const swTex = TX.makeSidewalk(); swTex.repeat.set(BLOCK / 8, BLOCK / 8);
-    const swMat = new THREE.MeshStandardMaterial({ map: swTex, roughness: 0.55, metalness: 0.3 });
+    const [roadMap, roadRough, roadNorm] = TX.makeRoad();
+    const roadMat = new THREE.MeshStandardMaterial({ map: roadMap, roughnessMap: roadRough, normalMap: roadNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
+    patchRoad(roadMat, this.timeU);
+    const [intMap, intRough, intNorm] = TX.makeIntersection();
+    const intMat = new THREE.MeshStandardMaterial({ map: intMap, roughnessMap: intRough, normalMap: intNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
+    patchRoad(intMat, this.timeU);
+    const [swMap, swRough, swNorm] = TX.makeSidewalk();
+    for (const t of [swMap, swRough, swNorm]) t.repeat.set(BLOCK / 8, BLOCK / 8);
+    const swMat = new THREE.MeshStandardMaterial({ map: swMap, roughnessMap: swRough, normalMap: swNorm, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1, metalness: 0.05, envMapIntensity: 0.8 });
+    patchRoad(swMat, this.timeU);
     const grassTex = TX.makeGrass(); grassTex.repeat.set(10, 10);
     const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 });
     const signTex = TX.makeSignAtlas();
-    const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.6, 1.6, 1.6) });
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15) });
     this.signMat = signMat;
     const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.5, metalness: 0.8 });
@@ -259,10 +294,10 @@ export const world = {
         uv.setXY(idx, u, v);
       }
       g.translate(cx, y0 + h / 2, cz);
-      tint.setHSL(R(0.55, 0.78), R(0.05, 0.3), R(0.5, 1.0)); colorize(g, tint);
+      tint.setHSL(R(0.55, 0.78), R(0.04, 0.22), R(0.66, 1.0)); colorize(g, tint);
       wallG[variant].push(g);
     };
-    const neonBox = (x, y, z, w, h, d, color, k = 2.2) => {
+    const neonBox = (x, y, z, w, h, d, color, k = 1.4) => {
       const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z);
       tint.set(color).multiplyScalar(k); colorize(g, tint); neonG.push(g);
     };
@@ -281,11 +316,11 @@ export const world = {
       for (let b = 0; b < N; b++) {
         // vertical road (x = roadX(k)) along block b
         let g = new THREE.PlaneGeometry(ROAD, BLOCK); g.rotateX(-Math.PI / 2);
-        let uv = g.attributes.uv; for (let q = 0; q < 4; q++) uv.setY(q, uv.getY(q) * BLOCK / ROAD);
+        let uv = g.attributes.uv; let vo = R(); for (let q = 0; q < 4; q++) uv.setY(q, uv.getY(q) * BLOCK / ROAD + vo);
         g.translate(roadX(k), 0.0, blockC(b)); roadGs.push(g);
         // horizontal road
         g = new THREE.PlaneGeometry(ROAD, BLOCK); g.rotateX(-Math.PI / 2);
-        uv = g.attributes.uv; for (let q = 0; q < 4; q++) uv.setY(q, uv.getY(q) * BLOCK / ROAD);
+        uv = g.attributes.uv; vo = R(); for (let q = 0; q < 4; q++) uv.setY(q, uv.getY(q) * BLOCK / ROAD + vo);
         g.rotateY(Math.PI / 2); g.translate(blockC(b), 0.0, roadX(k)); roadGs.push(g);
       }
       for (let m = 0; m <= N; m++) { const g = new THREE.PlaneGeometry(ROAD, ROAD); g.rotateX(-Math.PI / 2); g.translate(roadX(k), 0.002, roadX(m)); intGs.push(g); }
@@ -325,7 +360,7 @@ export const world = {
         const th = R(0.18, 0.4) * h;
         building(tcx, tcz, tw, td, th, top, variant, [R(), R()]);
         // neon trim at the step
-        neonBox(tcx, top + 0.3, tcz, tw + 0.6, 0.5, td + 0.6, RP(this.palette(cx, cz)), 1.6);
+        neonBox(tcx, top + 0.3, tcz, tw + 0.6, 0.5, td + 0.6, RP(this.palette(cx, cz)), 1.1);
         top += th;
       }
       // roof gear
@@ -338,7 +373,7 @@ export const world = {
       // vertical neon edges on tall towers
       if (h > 60 && chance(0.6)) {
         const col = RP(this.palette(cx, cz)); const hh = h * R(0.4, 0.95);
-        for (const [sx, sz] of [[1, 1], [-1, -1], [1, -1], [-1, 1]]) if (chance(0.5)) neonBox(cx + sx * (w / 2 + 0.15), hh / 2, cz + sz * (d / 2 + 0.15), 0.4, hh, 0.4, col, 2.0);
+        for (const [sx, sz] of [[1, 1], [-1, -1], [1, -1], [-1, 1]]) if (chance(0.5)) neonBox(cx + sx * (w / 2 + 0.15), hh / 2, cz + sz * (d / 2 + 0.15), 0.4, hh, 0.4, col, 1.3);
       }
       // signs on street-facing sides
       const sides = [[0, 1, w, cx, cz + d / 2, 0], [0, -1, w, cx, cz - d / 2, Math.PI], [1, 0, d, cx + w / 2, cz, Math.PI / 2], [-1, 0, d, cx - w / 2, cz, -Math.PI / 2]];
@@ -352,10 +387,8 @@ export const world = {
         const off = (nx !== 0 || nz !== 0 ? 0.35 : 0);
         const pos = nx !== 0 ? [sx + nx * off, sz + R(-1, 1) * (len / 2 - sw / 2)] : [sx + R(-1, 1) * (len / 2 - sw / 2), sz + nz * off];
         signQuad(pos[0], sy, pos[1], sw, sh, ry, idx);
-        glow.push({ x: pos[0] + nx * 2, y: sy, z: pos[1] + nz * 2, c: [0.6, 0.5, 0.6], s: sw * 1.1, blink: 0, a: 0.25 });
-        if (sy < 14) { // street-level light pool of the sign
-          lampPos.push({ x: pos[0] + nx * 5, z: pos[1] + nz * 5, c: new THREE.Color().setHSL(R(), 0.8, 0.45), r: 8 });
-        }
+        glow.push({ x: pos[0] + nx * 2, y: sy, z: pos[1] + nz * 2, c: [0.6, 0.5, 0.6], s: sw * 0.9, blink: 0, a: 0.1 });
+
       }
       return top;
     };
@@ -482,11 +515,11 @@ export const world = {
       }
     }
     const lampPole = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.15, 0.2, 7.5, 6).translate(0, 3.75, 0), darkMetal, lampMatrix.length);
-    const lampHead = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.25, 0.7).translate(0, 7.6, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.85, 0.6).multiplyScalar(2.5), toneMapped: false }), lampMatrix.length);
+    const lampHead = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.25, 0.7).translate(0, 7.6, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.85, 0.6).multiplyScalar(1.5), toneMapped: false }), lampMatrix.length);
     const m4 = new THREE.Matrix4();
     lampMatrix.forEach(([x, z], idx) => {
       m4.makeTranslation(x, 0, z); lampPole.setMatrixAt(idx, m4); lampHead.setMatrixAt(idx, m4);
-      glow.push({ x, y: 7.6, z, c: [1, 0.78, 0.5], s: 9, blink: 0, a: 0.8 });
+      glow.push({ x, y: 7.6, z, c: [1, 0.78, 0.5], s: 5, blink: 0, a: 0.4 });
       if (idx % 2 === 0) lampPos.push({ x, z, c: new THREE.Color(1, 0.7, 0.4), r: 14 });
     });
     scene.add(lampPole, lampHead);
@@ -562,7 +595,7 @@ export const world = {
     const gold = new THREE.MeshStandardMaterial({ color: 0xffc23a, metalness: 1, roughness: 0.28, emissive: 0x6a4a00, emissiveIntensity: 0.6 });
     const eagle = makeEagle(gold, 80, 14);
     eagle.position.set(cx, 162, cz - 12); scene.add(eagle);
-    glow.push({ x: cx, y: 175, z: cz - 12, c: [1.4, 1.0, 0.3], s: 90, blink: 0, a: 0.35 });
+    glow.push({ x: cx, y: 175, z: cz - 12, c: [1.4, 1.0, 0.3], s: 70, blink: 0, a: 0.18 });
     // giant JUSTICE sign
     signQuad(cx, 48, cz + 8.4, 38, 19, 0, 0);
     // flood lights up
@@ -587,7 +620,7 @@ export const world = {
       uniforms: { time: { value: 0 }, scale: { value: 800 } },
       vertexShader: `attribute float size; attribute vec4 col; attribute float blink; varying vec4 vC; uniform float time; uniform float scale;
         void main(){ vC = col; if (blink > 0.0) { float f = fract((time + blink) * (blink < 2.0 ? 0.55 : 1.7)); vC.a *= (blink < 2.0 ? step(f, 0.18) : 0.6 + 0.4*sin(time*9.0+blink)); }
-          vec4 mv = modelViewMatrix*vec4(position,1.0); gl_PointSize = size*scale/max(1.0,-mv.z); gl_Position = projectionMatrix*mv; }`,
+          vec4 mv = modelViewMatrix*vec4(position,1.0); float dist = max(1.0,-mv.z); gl_PointSize = min(size*scale/dist, 160.0); vC.a *= smoothstep(4.0, 22.0, dist); gl_Position = projectionMatrix*mv; }`,
       fragmentShader: `varying vec4 vC; void main(){ vec2 c = gl_PointCoord-0.5; float d=length(c)*2.0; float a = pow(max(0.0,1.0-d),2.2); gl_FragColor = vec4(vC.rgb*1.4, vC.a*a); if(gl_FragColor.a<0.004) discard; }`,
     });
     const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 8; scene.add(pts);
@@ -599,7 +632,7 @@ export const world = {
     const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
     g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.5, 'rgba(255,255,255,0.25)'); g.addColorStop(1, 'rgba(255,255,255,0)');
     x.fillStyle = g; x.fillRect(0, 0, 128, 128);
-    const mat = new THREE.MeshBasicMaterial({ map: canvasTex(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.32 });
+    const mat = new THREE.MeshBasicMaterial({ map: canvasTex(c), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.18 });
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, lamps.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     lamps.forEach((l, i) => { p.set(l.x, 0.06, l.z); s.set(l.r * 2, 1, l.r * 2); m.compose(p, q, s); mesh.setMatrixAt(i, m); mesh.setColorAt(i, l.c); });
@@ -607,29 +640,33 @@ export const world = {
   },
 
   buildRain(scene) {
-    const n = 5000, size = 90;
-    const pos = new Float32Array(n * 2 * 3), end = new Float32Array(n * 2);
+    // light drizzle: sparse, thin streaks that fade with distance; the density breathes slowly
+    const n = 2600, size = 80;
+    const pos = new Float32Array(n * 2 * 3), end = new Float32Array(n * 2), seed = new Float32Array(n * 2);
     for (let i = 0; i < n; i++) {
-      const x = rand(size), y = rand(60), z = rand(size);
-      pos.set([x, y, z, x, y, z], i * 6); end[i * 2] = 0; end[i * 2 + 1] = 1;
+      const x = rand(size), y = rand(60), z = rand(size), s = Math.random();
+      pos.set([x, y, z, x, y, z], i * 6); end[i * 2] = 0; end[i * 2 + 1] = 1; seed[i * 2] = seed[i * 2 + 1] = s;
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('end', new THREE.BufferAttribute(end, 1));
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('end', new THREE.BufferAttribute(end, 1)); geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+    this.rainLevel = 0.3;
     this.rainMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-      uniforms: { time: { value: 0 }, cam: { value: new THREE.Vector3() }, size: { value: size } },
-      vertexShader: `attribute float end; uniform float time; uniform vec3 cam; uniform float size; varying float vA;
+      uniforms: { time: { value: 0 }, cam: { value: new THREE.Vector3() }, size: { value: size }, level: { value: this.rainLevel } },
+      vertexShader: `attribute float end; attribute float seed; uniform float time; uniform vec3 cam; uniform float size; uniform float level; varying float vA;
         void main(){
+          if (seed > level) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
           vec3 p = position; float H = 60.0;
-          p.y = mod(p.y - time*42.0, H) ;
-          p.x += time*3.0;
+          p.y = mod(p.y - time*38.0, H);
+          p.x += time*2.0;
           vec3 w = cam + (mod(p - cam + vec3(size*0.5, 30.0, size*0.5), vec3(size, H, size)) - vec3(size*0.5, 30.0, size*0.5));
-          w.y = max(0.0, w.y) ;
-          w += end * vec3(-0.15, 1.6, 0.0);
-          vA = 0.35 * (1.0 - end*0.6);
+          w.y = max(0.0, w.y);
+          float dist = length(w - cam);
+          w += end * vec3(-0.08, 1.05, 0.0);
+          vA = 0.2 * (1.0 - end*0.7) * (1.0 - smoothstep(25.0, 48.0, dist)) * smoothstep(1.5, 5.0, dist);
           gl_Position = projectionMatrix * viewMatrix * vec4(w,1.0);
         }`,
-      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(0.6,0.75,1.0,vA); }',
+      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(0.62,0.74,1.0,vA); }',
     });
     const rain = new THREE.LineSegments(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain);
   },
@@ -656,7 +693,9 @@ export const world = {
     this.skyMat.uniforms.time.value = t;
     this.glowMat.uniforms.time.value = t;
     this.rainMat.uniforms.time.value = t;
+    this.timeU.value = t;
     this.rainMat.uniforms.cam.value.copy(G.camera.position);
+    this.rainLevel = 0.3 + 0.2 * Math.sin(t * 0.045) + 0.12 * Math.sin(t * 0.13 + 1.7) + this.lightning * 0.25; this.rainMat.uniforms.level.value = clamp(this.rainLevel, 0.12, 0.75);
     this.sun.position.set(center.x - 50, 130, center.z - 30);
     this.sun.target.position.copy(center);
     // flyers
@@ -676,14 +715,15 @@ export const world = {
     const fl = this.lightning * (0.6 + 0.4 * Math.sin(t * 60));
     this.skyMat.uniforms.flash.value = fl;
     this.hemi.intensity = 0.55 + fl * 1.6;
-    this.sun.intensity = 0.9 + fl * 1.5;
+    this.sun.intensity = 0.5 + fl * 1.5;
     // steam vents + rain splashes near the player
     this.ventT -= dt;
     if (this.ventT <= 0) {
       this.ventT = 0.12;
       for (const v of this.vents) if (Math.abs(v.x - center.x) < 70 && Math.abs(v.z - center.z) < 70) fx.smokePuff(v, 1, 1.6, 2.2, 0.35, 2.4);
     }
-    for (let i = 0; i < 10; i++) fx.rain(new THREE.Vector3(center.x + rand(-30, 30), 0.1, center.z + rand(-30, 30)));
+    const splashes = Math.round(2 + this.rainLevel * 4);
+    for (let i = 0; i < splashes; i++) fx.rain(new THREE.Vector3(center.x + rand(-22, 22), 0.1, center.z + rand(-22, 22)));
   },
 };
 

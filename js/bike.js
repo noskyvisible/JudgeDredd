@@ -5,97 +5,17 @@ import { audio } from './audio.js';
 import { world } from './world.js';
 import { makeEagle } from './world.js';
 import { Character } from './character.js';
+import { makeLawmasterModel, ridePoseIK } from './lawmaster.js';
 import { clamp, lerp, damp, angDiff, dampAngle, rand, deg, chance } from './util.js';
 
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.8, ...o });
 const E = (c, k = 3) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), toneMapped: false });
 
 // ---------------------------------------------------------------------------
-// Lawmaster model
+// Lawmaster model + rider pose live in lawmaster.js
 // ---------------------------------------------------------------------------
-export function makeBikeModel(pal = {}) {
-  const body = pal.body ?? 0x14161c, accent = pal.accent ?? 0xe8b52a, glow = pal.glow ?? 0x40b0ff;
-  const g = new THREE.Group();
-  const shell = M(body, { roughness: 0.22, metalness: 0.85 });
-  const dark = M(0x0b0c10, { roughness: 0.5, metalness: 0.7 });
-  const gold = M(accent, { roughness: 0.3, metalness: 0.95 });
-  const tyre = M(0x0a0a0c, { roughness: 0.9, metalness: 0.1 });
-  const add = (mesh, x, y, z, parent = g) => { mesh.position.set(x, y, z); mesh.castShadow = true; parent.add(mesh); return mesh; };
-
-  // wheels
-  const wheel = (z) => {
-    const w = new THREE.Group(); w.position.set(0, 0.5, z);
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.32, 20), tyre); t.rotation.z = Math.PI / 2; t.castShadow = true; w.add(t);
-    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.34, 16), M(0x22252e)); rim.rotation.z = Math.PI / 2; w.add(rim);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.025, 6, 24), E(glow, 2.5)); ring.rotation.y = Math.PI / 2; ring.position.x = 0.17; w.add(ring);
-    const ring2 = ring.clone(); ring2.position.x = -0.17; w.add(ring2);
-    for (let i = 0; i < 4; i++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.06), dark); sp.rotation.x = (i * Math.PI) / 4; w.add(sp); }
-    return w;
-  };
-  const wr = wheel(-1.2); g.add(wr);
-  // front assembly pivots on Y
-  const front = new THREE.Group(); front.position.set(0, 1.2, 0.75); g.add(front);
-  const wf = wheel(0); wf.position.set(0, -0.7, 0.5); front.add(wf);
-  for (const x of [-0.2, 0.2]) { const fk = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.85, 6), M(0xaaaaaa, { metalness: 1, roughness: 0.2 })); fk.position.set(x, -0.35, 0.5); fk.rotation.x = -0.1; front.add(fk); }
-  add(new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 0.06), dark), 0, 0.12, 0.1, front);
-  for (const x of [-0.5, 0.5]) add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.2, 6), dark), x, 0.12, 0.1, front).rotation.x = Math.PI / 2;
-  // front nose fairing
-  const nose = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.9, 6, 12), shell); nose.rotation.x = Math.PI / 2; nose.scale.set(1.15, 1, 0.78);
-  add(nose, 0, -0.15, 0.6, front);
-  for (const x of [-0.22, 0.22]) add(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.1, 0.06), E(0xfff4d0, 4)), x, -0.07, 1.12, front);
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.05), E(accent, 1.8)), 0, -0.3, 1.1, front);
-  // windscreen
-  const ws = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.5), new THREE.MeshStandardMaterial({ color: 0x4a8ac0, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.5, side: THREE.DoubleSide, emissive: 0x103050, emissiveIntensity: 0.5 }));
-  ws.position.set(0, 0.28, 0.5); ws.rotation.x = -1.0; front.add(ws);
-  // siren bar
-  const sirenL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.12), E(0xff2020, 0.3)); add(sirenL, -0.18, 0.04, 0.55, front);
-  const sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.12), E(0x2060ff, 0.3)); add(sirenR, 0.18, 0.04, 0.55, front);
-  // main body
-  const tank = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 1.3, 6, 14), shell); tank.rotation.x = Math.PI / 2; tank.scale.set(1.05, 1, 0.72);
-  add(tank, 0, 0.95, -0.15);
-  const cowl = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.9, 6, 12), shell); cowl.rotation.x = Math.PI / 2; cowl.scale.set(1, 1, 0.8);
-  add(cowl, 0, 1.0, -1.0);
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.12, 0.9), M(0x1a1410, { roughness: 0.8, metalness: 0.1 })), 0, 1.3, -0.5); // seat
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 1.1), dark), 0, 0.55, -0.3); // engine
-  for (const x of [-0.36, 0.36]) add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.7), E(glow, 3)), x, 0.55, -0.3);
-  // side pods
-  for (const x of [-0.52, 0.52]) {
-    const pod = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.5, 4, 10), shell); pod.rotation.x = Math.PI / 2; pod.scale.set(0.8, 1, 1);
-    add(pod, x, 0.82, -0.25);
-    add(new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 1.6), E(accent, 1.8)), x * 1.17, 0.85, -0.25);
-    const eg = makeEagle(gold, 0.6, 0.04); eg.rotation.y = x > 0 ? Math.PI / 2 : -Math.PI / 2; eg.position.set(x * 1.25, 1.12, 0.1); g.add(eg);
-  }
-  // exhausts & tail
-  for (const x of [-0.22, 0.22]) {
-    const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.5, 10), M(0x555a66, { metalness: 1, roughness: 0.25 })); ex.rotation.x = Math.PI / 2;
-    add(ex, x, 0.78, -1.85);
-    const tip = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.02, 6, 12), E(0xff7a30, 2)); tip.position.set(x, 0.78, -2.12); g.add(tip);
-  }
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.05), E(0xff2010, 3.5)), 0, 1.02, -1.62);
-  // pegs / feet rests
-  for (const x of [-0.42, 0.42]) add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.3), dark), x, 0.62, 0.15);
-  // headlight beam
-  const spot = new THREE.SpotLight(0xfff0d8, 0, 80, 0.5, 0.7, 1.2);
-  spot.position.set(0, 1.2, 1.6); spot.target.position.set(0, 0.5, 14); front.add(spot); front.add(spot.target);
-  const siren = new THREE.PointLight(0xff2020, 0, 22, 2); siren.position.set(0, 1.9, 0.9); g.add(siren);
-  g.userData = { wr, wf, front, spot, siren, sirenL, sirenR, exhaust: [new THREE.Vector3(-0.22, 0.78, -2.2), new THREE.Vector3(0.22, 0.78, -2.2)] };
-  return g;
-}
-
-// rider pose (applied through Character.override)
-export function ridePose(ch, bike) {
-  ch.override = (B) => {
-    const steer = bike.steer || 0, ac = bike.accelLean || 0;
-    B.pos[1] = -0.44; B.pos[2] = 0.0;
-    B.torso[0] = 0.5 + ac * 0.15; B.torso[1] = steer * 0.25; B.torso[2] = -steer * 0.1;
-    B.head[0] = -0.35; B.head[1] = -steer * 0.2;
-    B.hipL[0] = -1.15; B.hipR[0] = -1.15; B.hipL[2] = 0.28; B.hipR[2] = -0.28;
-    B.knL[0] = 1.5; B.knR[0] = 1.5;
-    B.shL[0] = -1.15; B.shR[0] = -1.15 + (ch.aim > 0.1 ? -0.0 : 0); B.shL[1] = -0.05; B.shR[1] = 0.05;
-    B.elL[0] = -0.45; B.elR[0] = -0.45;
-    B.shL[2] = 0.2; B.shR[2] = -0.2;
-  };
-}
+export const makeBikeModel = makeLawmasterModel;
+export function ridePose(ch, bike) { ridePoseIK(ch, bike); }
 
 // ---------------------------------------------------------------------------
 // Path follower along road-grid nodes
@@ -205,10 +125,8 @@ export class Lawmaster {
     m.rotation.order = 'YXZ';
     m.rotation.z = this.lean;
     u.front.rotation.y = -this.steer * 0.45;
-    this.wheelRot += this.speed * (dt || 0) / 0.5;
-    u.wr.children[0].rotation.x = u.wr.children[1].rotation.x = this.wheelRot;
-    for (let i = 3; i < u.wr.children.length; i++) u.wr.children[i].rotation.x = this.wheelRot + (i - 3) * Math.PI / 4;
-    for (let i = 3; i < u.wf.children.length; i++) u.wf.children[i].rotation.x = this.wheelRot + (i - 3) * Math.PI / 4;
+    this.wheelRot += this.speed * (dt || 0) / 0.55;
+    u.rearSpin.rotation.x = this.wheelRot; u.frontSpin.rotation.x = this.wheelRot;
     m.position.y = Math.sin(G.time * 18) * 0.008 * clamp(Math.abs(this.speed) / 40, 0, 1) * 0 + 0;
   }
 
@@ -277,7 +195,6 @@ export class PerpBike extends Lawmaster {
     super(scene, { body: 0x3a0e16, accent: 0xff3040, glow: 0xff4030 });
     this.perp = true; this.hp = 100; this.maxHp = 100; this.crime = crime; this.radius = 1.1;
     this.rider = new Character('biker'); this.model.add(this.rider.root); ridePose(this.rider, this);
-    this.rider.root.position.set(0, 0.28, -0.55);
     this.state = 'idle'; this.nextNode = null; this.fleeT = 0; this.dead = false; this.crashed = false;
     this.name = 'Speed Demon'; this.isBike = true;
     this.model.userData.spot.intensity = 18;

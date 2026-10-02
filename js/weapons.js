@@ -17,9 +17,9 @@ export const AMMO = [
 const projectiles = [];
 const firePatches = [];
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpC = new THREE.Vector3();
-const boltGeo = new THREE.BoxGeometry(0.07, 0.07, 1).translate(0, 0, -0.5);
+const boltGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5);
 const boltMats = {};
-const bolt = (color, boost = 3) => boltMats[color + '_' + boost] || (boltMats[color + '_' + boost] = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(boost), toneMapped: false, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
+const bolt = (color, boost = 3) => boltMats[color + '_' + boost] || (boltMats[color + '_' + boost] = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(boost), toneMapped: false, blending: THREE.AdditiveBlending, transparent: true, opacity: boost > 2 ? 1 : 0.35, depthWrite: false }));
 
 export const weapons = {
   projectiles, firePatches,
@@ -29,11 +29,13 @@ export const weapons = {
     const spread = opts.spread ?? (a.id === 'std' ? 0.012 : 0.004);
     const d = tmpA.copy(dir).normalize();
     d.x += rand(-spread, spread); d.y += rand(-spread, spread); d.z += rand(-spread, spread); d.normalize();
-    const scale = a.explosive || a.homing ? 0.25 : a.id === 'ap' ? 0.18 : 0.12;
-    const mesh = new THREE.Mesh(boltGeo, bolt(a.color, a.id === 'std' ? 3 : 4));
-    const len = a.explosive ? 1.2 : a.homing ? 1.5 : 3.0;
-    mesh.scale.set(scale * 4, scale * 4, len);
-    mesh.renderOrder = 12; G.scene.add(mesh);
+    const wid = a.explosive || a.homing ? 0.34 : a.id === 'ap' ? 0.2 : 0.14;
+    const len = a.explosive ? 1.4 : a.homing ? 1.8 : a.id === 'ap' ? 6 : 4.2;
+    const mesh = new THREE.Group();
+    const core = new THREE.Mesh(boltGeo, bolt(a.color, 5)); core.scale.set(wid, wid, len); mesh.add(core);
+    const halo = new THREE.Mesh(boltGeo, bolt(a.color, 1.4)); halo.scale.set(wid * 3.6, wid * 3.6, len * 1.15); mesh.add(halo);
+    mesh.traverse((o) => { if (o.isMesh) o.renderOrder = 12; });
+    G.scene.add(mesh);
     const p = {
       a, owner, mesh, pos: from.clone(), vel: d.clone().multiplyScalar(opts.speed ?? a.speed), life: a.homing ? 6 : 2.2, bounces: a.bounces || 0,
       dmg: opts.dmg ?? a.dmg, hitSet: new Set(), target: null, ownerIsPlayer: owner === 'player', trailT: 0,
@@ -94,7 +96,7 @@ export const weapons = {
       let best = null, bd = 1e9; // acquire target near the line of flight
       const fwd = tmpC.copy(p.vel).normalize();
       for (const e of G.enemies.hostiles()) {
-        const to = tmpA.set(e.pos.x - p.pos.x, 1 - p.pos.y, e.pos.z - p.pos.z); const d = to.length();
+        const to = tmpA.set(e.pos.x - p.pos.x, 1.5 - p.pos.y, e.pos.z - p.pos.z); const d = to.length();
         if (d > 70) continue;
         const dot = to.normalize().dot(fwd); if (dot < 0.3) continue;
         const sc = d * (2 - dot); if (sc < bd) { bd = sc; best = e; }
@@ -102,7 +104,7 @@ export const weapons = {
       p.target = best;
     }
     if (p.target) {
-      const to = tmpA.set(p.target.pos.x - p.pos.x, 1.1 - p.pos.y, p.target.pos.z - p.pos.z).normalize();
+      const to = tmpA.set(p.target.pos.x - p.pos.x, 1.5 - p.pos.y, p.target.pos.z - p.pos.z).normalize();
       const sp = p.vel.length();
       const v = tmpC.copy(p.vel).normalize().lerp(to, clamp(dt * 6.5, 0, 1)).normalize();
       p.vel.copy(v).multiplyScalar(sp);
@@ -125,7 +127,7 @@ export const weapons = {
       if (G.traffic) { const h = G.traffic.hitTest(from, to); if (h && h.t < bt) { bt = h.t; best = { car: h.car, h }; } }
     } else if (G.player && !G.player.dead) {
       const pl = G.player;
-      const t = segSphere(from.x, from.y, from.z, to.x, to.y, to.z, pl.pos.x, pl.pos.y + 1.0, pl.pos.z, 0.55);
+      const t = segSphere(from.x, from.y, from.z, to.x, to.y, to.z, pl.pos.x, pl.pos.y + 1.4, pl.pos.z, 0.7);
       if (t !== null) { bt = t; best = { player: pl, h: { t } }; }
     }
     if (best && bt <= wt) {
