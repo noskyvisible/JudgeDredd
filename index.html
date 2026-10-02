@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Judge Dredd: Mega-City One</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="floaters"></div>
+
+<div id="hud" class="hidden">
+  <div id="vignette"></div><div id="speedlines"></div><div id="lightning"></div>
+  <div id="topleft">
+    <div id="rankbox"><div id="rankname">ROOKIE JUDGE</div><div class="bar thin"><i id="credbar"></i></div><div id="credtxt">0 CRED</div></div>
+    <div id="district">HALL OF JUSTICE</div>
+    <div id="crimelevel"><span>CRIME LEVEL</span><div class="bar thin red"><i id="crimebar"></i></div></div>
+  </div>
+  <div id="dispatch"></div>
+  <div id="topcenter"><div id="combo"><b id="combonum">0</b><span>COMBO</span><div class="bar thin"><i id="combobar"></i></div><div id="finisher">JUDGEMENT READY</div></div></div>
+  <div id="minimapbox"><canvas id="minimap" width="240" height="240"></canvas><div id="mmtitle">SECTOR SCAN</div></div>
+  <div id="feed"></div>
+  <div id="bottomleft">
+    <div id="dredd">J. DREDD</div>
+    <div class="bar"><i id="hpbar"></i><em id="hptxt">100</em></div>
+    <div class="bar armor"><i id="armorbar"></i></div>
+  </div>
+  <div id="ammo"></div>
+  <div id="speedo"><b id="speed">0</b><span>KM/H</span><div class="bar thin blue"><i id="boostbar"></i></div><div id="ap">AUTOPILOT</div></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b id="hitmark"></b></div>
+  <div id="prompt"></div>
+  <div id="banner"><div id="bannertitle"></div><div id="bannersub"></div></div>
+  <div id="warn">!</div>
+  <div id="objective"></div>
+  <div id="controlhint">TAB track crime · M map · P pause</div>
+</div>
+
+<div id="mapscreen" class="hidden"><canvas id="bigmap" width="760" height="760"></canvas><div id="maplegend">M — close map</div></div>
+
+<div id="judge" class="hidden"></div>
+
+<div id="title" class="screen">
+  <div class="titlebox">
+    <div class="eagle">🦅</div>
+    <h1>JUDGE DREDD</h1>
+    <h2>MEGA-CITY ONE</h2>
+    <p class="tag">“I AM THE LAW.”</p>
+    <button id="startbtn" disabled>LOADING…</button>
+    <div class="controls">
+      <div><b>WASD</b> move · <b>SHIFT</b> sprint/boost · <b>SPACE</b> dodge/drift</div>
+      <div><b>LMB</b> daystick combo · <b>RMB</b> aim Lawgiver · <b>LMB (aiming)</b> fire</div>
+      <div><b>F</b> counter · <b>Q</b> snap-shot · <b>1–6 / wheel</b> ammo · <b>E</b> interact / judge / mount</div>
+      <div><b>B</b> call Lawmaster · <b>G</b> autopilot · <b>H</b> siren · <b>TAB</b> track crime · <b>M</b> map</div>
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="titlebox small"><h2>PAUSED</h2><p>Click to return to the streets</p>
+  <div class="controls">
+    <div><b>WASD</b> move · <b>SHIFT</b> sprint/boost · <b>SPACE</b> dodge/drift</div>
+    <div><b>LMB</b> daystick · <b>RMB</b> aim · <b>F</b> counter · <b>Q</b> snap-shot · <b>1–6</b> ammo</div>
+    <div><b>E</b> interact · <b>B</b> call bike · <b>G</b> autopilot · <b>H</b> siren · <b>TAB</b> track · <b>M</b> map</div>
+    <div><b>V</b> Dredd's voice · <b>N</b> music · <b>O</b> graphics quality</div>
+  </div>
+  <div id="stats"></div></div>
+</div>
+
+<div id="death" class="screen hidden"><div class="titlebox small"><h2>JUDGE DOWN</h2><p>Medics are scraping you off the asphalt…</p></div></div>
+
+<div id="boot">LOADING MEGA-CITY ONE…</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
