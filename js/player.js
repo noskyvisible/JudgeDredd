@@ -539,18 +539,30 @@ export class Player {
     _v.addScaledVector(_r, shoulder);
     const desired = _w.copy(_v).addScaledVector(_f.set(dirX, dirY, dirZ), -this.camDist);
     // collision: walk from target to desired and stop before geometry
-    const steps = 8; let ok = this.camDist;
+    const steps = 16; let ok = this.camDist;
     for (let i = 1; i <= steps; i++) {
       const p = _f.copy(_v).lerp(desired, i / steps);
       if (p.y < 0.4) { ok = this.camDist * (i - 1) / steps; break; }
       const bs = world.nearbyBoxes(p.x, p.z, this._cb || (this._cb = []));
-      let hit = false; for (const b of bs) if (p.y < b.h && p.x > b.minX - 0.3 && p.x < b.maxX + 0.3 && p.z > b.minZ - 0.3 && p.z < b.maxZ + 0.3) { hit = true; break; }
+      let hit = false; for (const b of bs) if (p.y < b.h && p.x > b.minX - 0.9 && p.x < b.maxX + 0.9 && p.z > b.minZ - 0.9 && p.z < b.maxZ + 0.9) { hit = true; break; }
       if (hit) { ok = this.camDist * (i - 1) / steps; break; }
     }
-    const finalDist = Math.max(0.8, Math.min(this.camDist, ok));
+    const finalDist = Math.max(0.35, Math.min(this.camDist, ok));
     desired.copy(_v).addScaledVector(_f.set(dirX, dirY, dirZ), -finalDist);
     if (!this.camInit) { this.camPos.copy(desired); this.camInit = true; }
     this.camPos.lerp(desired, 1 - Math.exp(-(bike ? 14 : 22) * dt));
+    // never let the smoothed camera end up inside a building (it renders black in there): push it out through the nearest face
+    for (let it = 0; it < 3; it++) {
+      const bs = world.nearbyBoxes(this.camPos.x, this.camPos.z, this._cb || (this._cb = []));
+      let moved = false;
+      for (const b of bs) {
+        const m = 0.7; if (this.camPos.y >= b.h + 0.2 || this.camPos.x <= b.minX - m || this.camPos.x >= b.maxX + m || this.camPos.z <= b.minZ - m || this.camPos.z >= b.maxZ + m) continue;
+        const dl = this.camPos.x - (b.minX - m), dr = (b.maxX + m) - this.camPos.x, dn = this.camPos.z - (b.minZ - m), df = (b.maxZ + m) - this.camPos.z, mn = Math.min(dl, dr, dn, df);
+        if (mn === dl) this.camPos.x = b.minX - m; else if (mn === dr) this.camPos.x = b.maxX + m; else if (mn === dn) this.camPos.z = b.minZ - m; else this.camPos.z = b.maxZ + m;
+        moved = true;
+      }
+      if (!moved) break;
+    }
     cam.position.copy(this.camPos);
     // shake
     const sh = fx.shakeValue;
