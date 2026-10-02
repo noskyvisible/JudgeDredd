@@ -184,9 +184,11 @@ class ArcPool {
     this.mesh.frustumCulled = false; this.mesh.renderOrder = 13;
     this._d = new THREE.Vector3(); this._p1 = new THREE.Vector3(); this._p2 = new THREE.Vector3(); this._s = new THREE.Vector3(); this._m = new THREE.Vector3(); this._prev = new THREE.Vector3(); this._cur = new THREE.Vector3(); this._tc = new THREE.Vector3();
   }
-  add(a, b, color, jitter, life) {
+  add(a, b, color, jitter, life, width = 1, still = false) {
     if (this.arcs.length >= this.max) this.arcs.shift();
-    this.arcs.push({ a: a.clone(), b: b.clone(), c: new THREE.Color(color), jitter, life, maxLife: life });
+    const A = { a: a.clone(), b: b.clone(), c: new THREE.Color(color), jitter, life, maxLife: life, width, still };
+    if (still) { A.off = new Float32Array((this.seg + 1) * 2); for (let i = 0; i < A.off.length; i++) A.off[i] = Math.random() - 0.5; }   // fixed jagged shape (bolts)
+    this.arcs.push(A);
   }
   quad(vi, a, b, side, w, r, g, bl, al, cr, cg, cb, ca) {
     // two triangles: (a-s, a+s, b-s) (a+s, b+s, b-s); `across` = -1 / +1 for the soft profile
@@ -208,13 +210,14 @@ class ArcPool {
       perp1.set(-dir.z, 0, dir.x); if (perp1.lengthSq() < 0.01) perp1.set(1, 0, 0); perp1.normalize(); perp2.crossVectors(dir, perp1).normalize();
       for (let s = 0; s <= seg; s++) {
         const t = s / seg, amp = Math.sin(Math.PI * t) * A.jitter * Math.min(1, len * 0.5);
-        cur.copy(A.a).addScaledVector(dir, len * t).addScaledVector(perp1, (Math.random() - 0.5) * 2 * amp).addScaledVector(perp2, (Math.random() - 0.5) * 2 * amp);
+        const r1 = A.still ? A.off[s * 2] + (Math.random() - 0.5) * 0.12 : Math.random() - 0.5, r2 = A.still ? A.off[s * 2 + 1] + (Math.random() - 0.5) * 0.12 : Math.random() - 0.5;
+        cur.copy(A.a).addScaledVector(dir, len * t).addScaledVector(perp1, r1 * 2 * amp).addScaledVector(perp2, r2 * 2 * amp);
         if (s > 0) {
           mid.addVectors(prev, cur).multiplyScalar(0.5).sub(cam); side.subVectors(cur, prev).cross(mid).normalize();
-          const flick = 0.75 + Math.random() * 0.5;
-          vi = this.quad(vi, prev, cur, side, 0.11 * (0.5 + k * 0.5), 0, 0, 0, 0.55 * k * flick, 0, 0, 0, 0);   // soft glow (colour set below)
+          const flick = 0.75 + Math.random() * 0.5, wd = A.width;
+          vi = this.quad(vi, prev, cur, side, 0.11 * wd * (0.5 + k * 0.5), 0, 0, 0, 0.55 * k * flick, 0, 0, 0, 0);   // soft glow (colour set below)
           for (let q = vi - 6; q < vi; q++) { this.col[q * 4] = A.c.r * 1.5; this.col[q * 4 + 1] = A.c.g * 1.5; this.col[q * 4 + 2] = A.c.b * 1.5; }
-          vi = this.quad(vi, prev, cur, side, 0.024, 0, 0, 0, k * flick, 0, 0, 0, 0);                    // hot core
+          vi = this.quad(vi, prev, cur, side, 0.024 * wd, 0, 0, 0, k * flick, 0, 0, 0, 0);                    // hot core
           for (let q = vi - 6; q < vi; q++) { this.col[q * 4] = 3.2; this.col[q * 4 + 1] = 3.2; this.col[q * 4 + 2] = 3.4; }
         }
         prev.copy(cur);
@@ -293,7 +296,7 @@ export const fx = {
     this.add = new ParticlePool(7000, true);
     this.smoke = new ParticlePool(2200, false);
     this.sparks = new SparkPool(3600);
-    this.arcs = new ArcPool(28, 9);
+    this.arcs = new ArcPool(44, 9);
     this.decals = new DecalPool(220);
     scene.add(this.add.points, this.smoke.points, this.sparks.mesh, this.arcs.mesh, this.decals.mesh);
 
@@ -371,6 +374,18 @@ export const fx = {
   },
   impact(p, n, color = 0xffd080, normal = null) { this.spark(p, n, color, 12, 0.55, normal, 0.9); this.flash(p, color, 2.5, 0.08, 10); this.glowPuff(p, color, 1.2, 0.1); },
   arc(a, b, color = 0x9fe0ff, jitter = 0.35, life = 0.12) { this.arcs.add(a, b, color, jitter, life); },
+  // distant lightning bolt: jagged chain from the cloud base down to a rooftop, with forks
+  bolt(top, ground, color = 0xcfe0ff, life = 0.3) {
+    const d = top.distanceTo(G.camera.position) || 100, w = Math.max(1, d / 5.5);
+    const dir = new THREE.Vector3().subVectors(ground, top), len = dir.length(), n = 6, pts = [top.clone()];
+    for (let i = 1; i < n; i++) pts.push(top.clone().addScaledVector(dir, i / n).add(new THREE.Vector3(rand(-1, 1), 0, rand(-1, 1)).multiplyScalar(len * 0.07)));
+    pts.push(ground.clone());
+    for (let i = 0; i < n; i++) this.arcs.add(pts[i], pts[i + 1], color, len * 0.035, life, w, true);
+    for (let k = 0; k < 3; k++) {
+      const a = pts[1 + Math.floor(Math.random() * (n - 2))], b = a.clone().add(new THREE.Vector3(rand(-1, 1) * len * 0.25, -rand(0.12, 0.35) * len, rand(-1, 1) * len * 0.25));
+      this.arcs.add(a, b, color, len * 0.04, life * 0.8, w * 0.55, true);
+    }
+  },
   arcBurst(c, radius = 1, n = 3, color = 0x9fe0ff, life = 0.1) {
     for (let i = 0; i < n; i++) {
       const a = new THREE.Vector3(c.x + rand(-0.2, 0.2), c.y + rand(-0.2, 0.2), c.z + rand(-0.2, 0.2));

@@ -123,10 +123,11 @@ const player = new Player(scene);
 G.player = player;
 player.pos.copy(world.spawnPos); player.yaw = Math.PI; player.camYaw = Math.PI;
 const bike = new Lawmaster(scene);
-bike.place(world.spawnPos.x + 2.6, world.spawnPos.z + 3, 0);
+bike.place(world.spawnPos.x + 5.5, world.spawnPos.z - 3.5, Math.PI / 2 + 0.35);
 G.bikeObj = bike;
 G.civs.init();
 G.traffic.init(34);
+renderer.compile(scene, camera);   // build every shader program up front so nothing hitches the first time it comes into view
 hud.init();
 input.init(canvas);
 G.voiceOn = true;
@@ -190,7 +191,7 @@ G.onPlayerDeath = () => { G.dead = true; hud.showDeath(true); audio.voice('Judge
 G.onRespawnReady = () => {
   G.dead = false; hud.showDeath(false); player.addCred(-Math.floor(player.cred * 0.1), 'MEDICAL LEAVE'); player.respawn();
   for (const e of G.enemies.all) { e.aggro = false; if (e.state === 'engage' || e.state === 'telegraph') e.setState('idle'); }
-  bike.place(world.spawnPos.x + 2.6, world.spawnPos.z + 3, 0); setPaused(true);
+  bike.place(world.spawnPos.x + 5.5, world.spawnPos.z - 3.5, Math.PI / 2 + 0.35); setPaused(true);
 };
 window.addEventListener('keydown', (e) => { if (judgement.key(e)) { e.preventDefault(); } });
 G.voiceOn = true;

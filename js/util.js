@@ -34,7 +34,7 @@ export function mulberry32(seed) {
 export function makeCanvas(w, h) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  return [c, c.getContext('2d')];
+  return [c, c.getContext('2d', { willReadFrequently: true })];   // CPU-raster canvases: cheap fills, cheap getImageData for the normal-map passes
 }
 
 export function canvasTex(c, { repeat = false, srgb = true, aniso = 8 } = {}) {
@@ -97,8 +97,8 @@ export function normalFromHeight(Hc, strength = 2) {
   for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
     const xm = (x - 1 + W) % W, xp = (x + 1) % W, ym = (y - 1 + Hh) % Hh, yp = (y + 1) % Hh;
     const dx = (H[y * W + xm] - H[y * W + xp]) * strength, dy = (H[yp * W + x] - H[ym * W + x]) * strength;
-    const l = Math.hypot(dx, dy, 1); const i = (y * W + x) * 4;
-    d[i] = (dx / l * 0.5 + 0.5) * 255; d[i + 1] = (dy / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    const k = 127.5 / Math.sqrt(dx * dx + dy * dy + 1); const i = (y * W + x) * 4;
+    d[i] = dx * k + 127.5; d[i + 1] = dy * k + 127.5; d[i + 2] = k + 127.5; d[i + 3] = 255;
   }
   nx.putImageData(out, 0, 0); return N;
 }

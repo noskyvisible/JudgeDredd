@@ -30,6 +30,12 @@ export const hud = {
     this.slots = [...el.ammo.children];
     const nm = document.createElement('div'); nm.id = 'ammoname'; el.hud.appendChild(nm); el.ammoname = nm;
     G.hud = this;
+    this.layout(); addEventListener('resize', () => this.layout());
+  },
+  // scale the HUD blocks with the viewport so nothing collides on small windows
+  layout() {
+    const hs = clamp(innerHeight / 760, 0.55, 1.15); this.hs = hs;
+    el.hud.style.setProperty('--hs', hs.toFixed(3)); this._dh = null;
   },
   show(v) { el.hud.classList.toggle('hidden', !v); },
   banner(title, sub = '', cls = '') {
@@ -103,7 +109,7 @@ export const hud = {
       html.push(`<div class="case ${s === tr ? 'tracked' : ''}"><b>${s.title.toUpperCase()}</b><small><span>${s.district}</span><span>${d}m</span></small><small><span class="sev">${'■'.repeat(s.sev)}${'□'.repeat(5 - s.sev)}</span><span class="${urgent ? 'urgent' : ''}">${Math.max(0, Math.ceil(s.timeLeft))}s${s.spawned && s.remaining ? ' · ' + s.remaining + ' perps' : ''}${s.bomb && s.bombStarted ? ' · 💣' + Math.ceil(s.bomb.timer) : ''}</span></small></div>`);
     }
     const h = html.join('');
-    if (h !== this._dh) { el.dispatch.innerHTML = h; this._dh = h; }
+    if (h !== this._dh) { el.dispatch.innerHTML = h; this._dh = h; this._dispBottom = el.dispatch.getBoundingClientRect().bottom + 10; }
   },
 
   updateObjective() {
@@ -116,7 +122,13 @@ export const hud = {
     const onscreen = !behind && Math.abs(x) < 0.92 && Math.abs(y) < 0.88;
     if (!onscreen) { const m = Math.max(Math.abs(x) / 0.92, Math.abs(y) / 0.85, 0.001); x /= m; y /= m; if (behind) { y = -0.85; } }
     el.objective.style.display = 'block';
-    el.objective.style.transform = `translate(${(x * 0.5 + 0.5) * innerWidth}px, ${(-y * 0.5 + 0.5) * innerHeight}px) translate(-50%,-50%)`;
+    // keep the marker out of the HUD columns (left: rank + dispatch list, right: minimap + feed)
+    let px = (x * 0.5 + 0.5) * innerWidth, py = (-y * 0.5 + 0.5) * innerHeight; const hs = this.hs || 1;
+    if (px < 350 * hs && py < this._dispBottom) px = 350 * hs;
+    else if (px > innerWidth - 270 * hs && py < 300 * hs) px = innerWidth - 270 * hs;
+    if (px < 370 * hs && py > innerHeight - 120 * hs) py = innerHeight - 125 * hs;                       // player block
+    else if (px > innerWidth - 440 * hs && py > innerHeight - 170 * hs) py = innerHeight - 175 * hs;   // ammo block
+    el.objective.style.transform = `translate(${px}px, ${py}px) translate(-50%,-50%)`;
     el.objective.innerHTML = `<div class="dia"></div>${Math.round(s.dist)}m`;
   },
 

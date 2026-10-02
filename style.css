@@ -165,3 +165,16 @@ button:hover:not(:disabled) { transform: scale(1.06); filter: brightness(1.15); 
 #firehint.on { opacity: 1; }
 #gunkeys { position: absolute; right: 24px; bottom: 112px; font-size: 11px; letter-spacing: .12em; opacity: .55; text-align: right; }
 #crosshair.fired i { background: #ffd24a; }
+
+/* ---- responsive HUD: each block scales from its own corner with the viewport height (--hs is set by ui.js) ---- */
+#topleft { transform-origin: 0 0; transform: scale(var(--hs, 1)); }
+#dispatch { top: calc(210px * var(--hs, 1)); transform-origin: 0 0; transform: scale(var(--hs, 1)); }
+#minimapbox { transform-origin: 100% 0; transform: scale(var(--hs, 1)); }
+#feed { top: calc(280px * var(--hs, 1)); transform-origin: 100% 0; transform: scale(var(--hs, 1)); }
+#bottomleft { transform-origin: 0 100%; transform: scale(var(--hs, 1)); }
+#ammo { transform-origin: 100% 100%; transform: scale(var(--hs, 1)); }
+#ammoname { bottom: calc(120px * var(--hs, 1)); transform-origin: 100% 100%; transform: scale(var(--hs, 1)); }
+#gunkeys { bottom: calc(112px * var(--hs, 1)); transform-origin: 100% 100%; transform: scale(var(--hs, 1)); }
+#speedo { bottom: calc(26px * var(--hs, 1)); transform: translateX(-50%) scale(var(--hs, 1)); transform-origin: 50% 100%; }
+#topcenter { transform: translateX(-50%) scale(var(--hs, 1)); transform-origin: 50% 0; }
+#prompt { bottom: calc(160px * var(--hs, 1)); transform: translateX(-50%) scale(var(--hs, 1)); transform-origin: 50% 100%; }

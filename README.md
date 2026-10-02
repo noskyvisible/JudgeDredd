@@ -31,7 +31,8 @@ Use a desktop browser with WebGL2 (Chrome / Edge / Firefox). Click **Enter the s
 | `Space` | dodge-roll (i-frames) | handbrake / drift |
 | Mouse | camera | camera |
 | `LMB` | daystick combo (free-flow) · fire when aiming | fire when aiming |
-| `RMB` (hold) | aim the Lawgiver | aim |
+| `RMB` (hold) / `Z` (toggle) | aim the Lawgiver | aim |
+| `R` | **hip-fire** the Lawgiver (aims for you, no `RMB` needed) | hip-fire |
 | `F` | **counter** (when an attacker flashes red) | — |
 | `Q` | snap-shot at the nearest perp | snap-shot |
 | `1`–`6` / wheel | select Lawgiver ammo | same |
@@ -77,15 +78,27 @@ kidnap → *20 years* · terrorism → *life*. Higher-tier scenarios (hostages, 
 
 | File | What it does |
 |---|---|
-| `js/world.js` | procedural city: roads, megablocks, signs atlas, rain, sky, lightning, flyers, Hall of Justice |
-| `js/textures.js` | canvas-generated facades, asphalt, neon sign atlas |
+| `js/world.js` | procedural city: roads, megablocks, shopfronts, signs, rain, sky, lightning, flyers, cables, searchlights, Hall of Justice |
+| `js/facades.js`, `js/textures.js` | canvas-generated PBR building facades (albedo / emissive / roughness-metal / normal), wet asphalt, neon sign atlas |
+| `js/shaders.js` | shader patches: wall wetness, road puddle ripples, height fog, fresnel rim light |
+| `js/holo.js` | flickering holographic adverts above intersections |
 | `js/character.js` | procedural humanoid rig + keyframed animation clips (Dredd, perps, civilians) |
+| `js/charmodel.js` | the character bodies — Dredd's hero kit (red visor, gold eagle/ribbed pauldrons, green gear) and perp types |
+| `js/lawmaster.js`, `js/carmodel.js` | the Lawmaster motorcycle + seated-rider IK; sedans, taxis, coupes and box trucks |
 | `js/player.js` | Dredd controller: free-flow combat, counters, dodge, Lawgiver, camera, ranks |
-| `js/bike.js` | Lawmaster model + physics, boost/drift, autopilot, hostile bikers |
+| `js/bike.js` | Lawmaster physics, boost/drift, autopilot, hostile bikers |
 | `js/weapons.js` | the six Lawgiver ammo types, projectiles, explosions, fire |
 | `js/enemies.js` | perp AI (token-based surround, telegraphs, surrender), manager |
 | `js/crimes.js` | dispatch, scenarios, bombs, hostages, chases, wagon, sentencing rules |
 | `js/ui.js` | HUD, minimap, map, judgement screen |
-| `js/fx.js` | particles, rings, ribbons, light pool, shake, hit-stop |
+| `js/fx.js` | fire/smoke/glow particles, streak sparks, electric arcs, lightning, bullet-hole & scorch decals, explosions, shockwaves, shake, hit-stop |
 | `js/audio.js` | procedural SFX, engine, siren, rain and synth soundtrack |
 | `js/civs.js`, `js/traffic.js`, `js/pickups.js` | citizens, road traffic, ammo & health pickups |
+
+## Graphics
+
+Rendered with a physically-based pipeline: PMREM image-based lighting from an imaginary lit skyline, shadowed sun,
+dynamic point lights that hop between the lamps and neon nearest to you, height fog, wet roads with animated puddle ripples
+and reflection smears, volumetric lamp / headlight cones, searchlights and holograms. Post-processing: gentle bloom, colour grade,
+sharpen, speed blur, shock-wave distortion and chromatic aberration. `O` cycles quality (LOW / MEDIUM / HIGH) and the game
+auto-lowers it if the frame rate collapses; `F3` shows an FPS counter.

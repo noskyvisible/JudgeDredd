@@ -7,6 +7,8 @@ import { rand, randInt, pick, chance, clamp, mulberry32, segAABB, makeCanvas, ca
 import * as TX from './textures.js';
 import { makeFacadeSet } from './facades.js';
 import { patchWall, patchRoad } from './shaders.js';
+import { buildHolograms } from './holo.js';
+const tmpDir = new THREE.Vector3();
 
 export const N = 15;            // blocks per side
 export const S = 100;           // block pitch
@@ -499,7 +501,7 @@ export const world = {
         glow.push({ x: px, y: 12, z: pz, c: [1, 0.85, 0.3], s: 16, blink: 0 });
         for (const [sx, sz] of [[-26, -26], [26, 26], [-26, 26], [26, -26]]) { metalBox(cx + sx, 2, cz + sz, 4, 4, 4); addBox({ minX: cx + sx - 2, maxX: cx + sx + 2, minZ: cz + sz - 2, maxZ: cz + sz + 2, h: 4 }); }
       } else if (kind === 'hall') {
-        this.buildHall(cx, cz, { building, neonBox, metalBox, signQuad, glow, addBox, scene, colorize, metalG, neonG, tint });
+        this.buildHall(cx, cz, { building, neonBox, metalBox, darkBox, cylBox, signQuad, glow, addBox, scene, colorize, metalG, neonG, tint });
         minEdge = 0;
       }
       edgeH[`${i},${j}`] = minEdge;
@@ -629,6 +631,7 @@ export const world = {
     this.buildLights(scene);
     this.buildCables(scene, edgeH);
     this.buildSearchlights(scene);
+    this.buildHolo(scene);
     // ===== rain =====
     this.buildRain(scene);
     // ===== flying traffic =====
@@ -642,7 +645,7 @@ export const world = {
   },
 
   buildHall(cx, cz, h) {
-    const { building, neonBox, metalBox, signQuad, glow, addBox, scene, colorize, metalG, tint } = h;
+    const { building, neonBox, metalBox, darkBox, cylBox, signQuad, glow, addBox, scene, colorize, metalG, tint } = h;
     // plaza paving is the sidewalk slab. Main building + wings + columns.
     building(cx, cz - 12, 56, 40, 60, 0, 0, [0.1, 0]);
     building(cx - 32, cz - 18, 20, 30, 38, 0, 1, [0.3, 0]);
@@ -653,12 +656,66 @@ export const world = {
     addBox({ minX: cx + 22, maxX: cx + 42, minZ: cz - 33, maxZ: cz - 3, h: 38 });
     neonBox(cx, 61, cz - 12, 57, 1.2, 41, 0xffc040, 2);
     neonBox(cx, 161, cz - 12, 31, 1, 25, 0xffc040, 2);
-    // columns
-    for (let q = -3; q <= 3; q++) {
-      const g = new THREE.CylinderGeometry(1.3, 1.5, 34, 10); g.translate(cx + q * 8, 17, cz + 10.5); tint.setScalar(1.6); colorize(g, tint); metalG.push(g);
+    // ---- monumental frontage: colonnade, entablature, lit portal, paving inlay, statues ----
+    // stone is floodlit: baked directional shading + a falloff with height, drawn unlit; gold is real metal with a warm emissive floor
+    const stoneG = [], goldG = [], Ld = new THREE.Vector3(0.25, 0.45, 1).normalize();
+    const bakeLit = (g, x, y, z, base, list) => {
+      g.translate(x, y, z); const n = g.attributes.normal, p = g.attributes.position, c = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) {
+        const lam = 0.3 + 0.7 * Math.max(0, n.getX(i) * Ld.x + n.getY(i) * Ld.y + n.getZ(i) * Ld.z), fall = 1 - 0.62 * Math.min(1, Math.max(0, p.getY(i) / 65));
+        c[i * 3] = base[0] * lam * fall; c[i * 3 + 1] = base[1] * lam * fall; c[i * 3 + 2] = base[2] * lam * fall;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(c, 3)); list.push(g);
+    };
+    const stone = (g, x, y, z, k = 1) => bakeLit(g, x, y, z, [0.5 * k, 0.43 * k, 0.32 * k], stoneG);
+    for (let q = 0; q < 8; q++) {
+      if (q === 3 || q === 4) continue;                                   // the entrance gap
+      const x = cx - 24.5 + q * 7;
+      stone(new THREE.CylinderGeometry(1.5, 1.7, 59, 18), x, 29.5, cz + 11.4);
+      stone(new THREE.BoxGeometry(4.2, 1.0, 4.2), x, 59.6, cz + 11.4, 1.1); stone(new THREE.BoxGeometry(3.8, 1.2, 3.8), x, 0.6, cz + 11.4, 1.1);
     }
-    // steps
-    metalBox(cx, 0.5, cz + 16, 60, 1, 6);
+    stone(new THREE.BoxGeometry(60, 2.6, 6.4), cx, 62.2, cz + 10.6, 0.95);                  // entablature
+    neonBox(cx, 63.7, cz + 13.9, 60, 0.45, 0.4, 0xffc040, 2.4);
+    neonBox(cx, 60.9, cz + 13.9, 60, 0.3, 0.3, 0xffc040, 1.4);
+    { // glowing portal: golden double doors under a fan-light, lit from within
+      const [pc, px] = makeCanvas(256, 512);
+      const pg = px.createLinearGradient(0, 0, 0, 512); pg.addColorStop(0, '#c98d34'); pg.addColorStop(0.45, '#ffdc96'); pg.addColorStop(1, '#fff2cc'); px.fillStyle = pg; px.fillRect(0, 0, 256, 512);
+      px.strokeStyle = 'rgba(110,64,8,0.75)'; px.lineWidth = 4;
+      for (const dx of [0, 128]) { px.fillStyle = 'rgba(140,84,12,0.16)'; px.fillRect(dx + 10, 130, 108, 372); px.strokeRect(dx + 10, 130, 108, 372); px.strokeRect(dx + 24, 150, 80, 150); px.strokeRect(dx + 24, 318, 80, 168); }
+      px.fillStyle = 'rgba(70,36,0,0.85)'; px.fillRect(125, 130, 6, 382); px.fillRect(110, 300, 6, 40); px.fillRect(140, 300, 6, 40);
+      px.beginPath(); px.arc(128, 128, 112, Math.PI, 2 * Math.PI); px.stroke();
+      for (let i = 1; i < 8; i++) { const a = Math.PI + i * Math.PI / 8; px.beginPath(); px.moveTo(128, 128); px.lineTo(128 + Math.cos(a) * 112, 128 + Math.sin(a) * 112); px.stroke(); }
+      px.fillStyle = 'rgba(70,36,0,0.9)'; px.beginPath(); px.moveTo(128, 52); px.lineTo(150, 84); px.lineTo(196, 70); px.lineTo(170, 112); px.lineTo(148, 108); px.lineTo(128, 128); px.lineTo(108, 108); px.lineTo(86, 112); px.lineTo(60, 70); px.lineTo(106, 84); px.closePath(); px.fill();
+      const portal = new THREE.Mesh(new THREE.PlaneGeometry(11, 21), new THREE.MeshBasicMaterial({ map: canvasTex(pc), toneMapped: false, color: new THREE.Color(1.15, 1.1, 1.0) }));
+      portal.position.set(cx, 10.5, cz + 8.3); scene.add(portal);
+    }
+    stone(new THREE.BoxGeometry(13, 1.6, 1.2), cx, 21.7, cz + 8.5, 0.9);
+    for (const sx of [-1, 1]) { stone(new THREE.BoxGeometry(1.4, 22, 1.2), cx + sx * 6.3, 11, cz + 8.5, 0.9); neonBox(cx + sx * 5.55, 10.5, cz + 8.7, 0.12, 21, 0.12, 0xffc040, 2); }
+    glow.push({ x: cx, y: 9, z: cz + 12, c: [1.4, 1.0, 0.5], s: 26, blink: 0, a: 0.2 });
+    // paving inlay leading to the door (flat, so nobody trips on it)
+    for (let i = 0; i < 5; i++) neonBox(cx, 0.28, cz + 15 + i * 4.2, 58 - i * 7, 0.05, 0.35, 0xffc040, 0.9);
+    neonBox(cx, 0.28, cz + 15, 0.4, 0.05, 17, 0xffc040, 0.9);
+    // monumental Judge statues flanking the approach
+    for (const sx of [-1, 1]) {
+      const x0 = cx + sx * 21, z0 = cz + 27;
+      stone(new THREE.BoxGeometry(7.5, 2.4, 7.5), x0, 1.2, z0, 0.95); stone(new THREE.BoxGeometry(6.2, 1.2, 6.2), x0, 3.0, z0, 1.05);
+      const gp = (g, x, y, z) => { g.translate(x0 + x, y, z0 + z); goldG.push(g); };
+      for (const lx of [-0.95, 0.95]) gp(new THREE.CylinderGeometry(0.75, 0.9, 5.6, 10), lx, 6.4, 0);                   // legs
+      gp(new THREE.BoxGeometry(3.4, 0.7, 2.2), 0, 9.5, 0);                                                             // belt
+      gp(new THREE.BoxGeometry(3.6, 4.6, 2.2), 0, 12.2, 0);                                                            // torso
+      gp(new THREE.CylinderGeometry(1.2, 1.2, 1.3, 12).rotateZ(Math.PI / 2), -2.6, 14.1, 0);                          // ribbed pauldron
+      gp(new THREE.BoxGeometry(2.4, 0.6, 3.0), 2.6, 14.3, 0);                                                          // eagle-wing pauldron
+      for (const ax of [-2.55, 2.55]) gp(new THREE.CylinderGeometry(0.62, 0.55, 4.4, 8), ax, 11.6, 0.2);              // arms
+      gp(new THREE.SphereGeometry(1.35, 14, 10), 0, 15.8, 0);                                                          // helmet
+      gp(new THREE.BoxGeometry(0.35, 0.9, 1.6), 0, 17.3, 0);                                                           // crest
+      neonBox(x0, 15.9, z0 + 1.25, 2.1, 0.42, 0.25, 0xff2020, 2.6);                                                    // red visor
+      glow.push({ x: x0, y: 9, z: z0 + 3, c: [1.0, 0.8, 0.45], s: 18, blink: 0, a: 0.12 });
+      addBox({ minX: x0 - 3.2, maxX: x0 + 3.2, minZ: z0 - 3.2, maxZ: z0 + 3.2, h: 3.6 });
+    }
+    if (stoneG.length) scene.add(new THREE.Mesh(mergeGeometries(stoneG), new THREE.MeshBasicMaterial({ vertexColors: true })));
+    if (goldG.length) { const gm = new THREE.Mesh(mergeGeometries(goldG), new THREE.MeshStandardMaterial({ color: 0xffd25a, metalness: 0.85, roughness: 0.35, emissive: 0x8a6a10, emissiveIntensity: 0.8 })); gm.castShadow = true; scene.add(gm); }
+    // glowing vertical edges on the tower and the main block
+    for (const [ex, ez, y0, hh] of [[-15.2, cz - 24.2, 60, 100], [15.2, cz - 24.2, 60, 100], [-15.2, cz + 0.2, 60, 100], [15.2, cz + 0.2, 60, 100], [-28.4, cz + 8.4, 0, 60], [28.4, cz + 8.4, 0, 60]]) neonBox(cx + ex, y0 + hh / 2, ez, 0.5, hh, 0.5, 0xffc040, 1.5);
     // golden eagle statue on top
     const gold = new THREE.MeshStandardMaterial({ color: 0xffc23a, metalness: 1, roughness: 0.28, emissive: 0x6a4a00, emissiveIntensity: 0.6 });
     const eagle = makeEagle(gold, 80, 14);
@@ -847,6 +904,17 @@ export const world = {
     }
   },
 
+  // holographic adverts floating above a scatter of intersections
+  buildHolo(scene) {
+    const rng = mulberry32(777), spots = [], c = N / 2;
+    for (let tries = 0; tries < 600 && spots.length < 14; tries++) {
+      const i = 1 + Math.floor(rng() * (N - 1)), j = 1 + Math.floor(rng() * (N - 1));
+      if (Math.hypot(i - c, j - c) < 2.2 || spots.some((s) => Math.hypot(s.i - i, s.j - j) < 3)) continue;
+      spots.push({ i, j, x: roadX(i), z: roadX(j), y: 40 + rng() * 12 });
+    }
+    this.holos = buildHolograms(scene, this.timeU, eagleShape, spots);
+  },
+
   buildRain(scene) {
     // light drizzle: sparse, thin streaks that fade with distance; the density breathes slowly
     const n = 2600, size = 80;
@@ -905,6 +973,7 @@ export const world = {
     this.updateLights(dt, center);
     for (const s of this.searchlights) { s.rotation.y = t * 0.22 + s.userData.ph; s.rotation.z = 0.32 + 0.18 * Math.sin(t * 0.31 + s.userData.ph * 1.7); }
     this.rainMat.uniforms.cam.value.copy(G.camera.position);
+    for (const h of this.holos) h.rotation.y = Math.atan2(G.camera.position.x - h.position.x, G.camera.position.z - h.position.z);
     this.rainLevel = 0.3 + 0.2 * Math.sin(t * 0.045) + 0.12 * Math.sin(t * 0.13 + 1.7) + this.lightning * 0.25; this.rainMat.uniforms.level.value = clamp(this.rainLevel, 0.12, 0.75);
     this.sun.position.set(center.x - 50, 130, center.z - 30);
     this.sun.target.position.copy(center);
@@ -920,7 +989,13 @@ export const world = {
     this.flyGeo.attributes.position.needsUpdate = true;
     // lightning
     this.lightningT -= dt;
-    if (this.lightningT <= 0) { this.lightning = 1; this.lightningT = rand(9, 26); audio.thunder(); if (chance(0.5)) this.lightningT = 0.25; }
+    if (this.lightningT <= 0) {
+      this.lightning = 1; this.lightningT = rand(9, 26); audio.thunder(); if (chance(0.5)) this.lightningT = 0.25;
+      // a bolt in the sky ahead of the camera: ~700 m out, streaking down from the cloud base
+      const cam = G.camera.position, fwd = tmpDir.set(0, 0, -1).applyQuaternion(G.camera.quaternion); const yaw = Math.atan2(fwd.x, fwd.z) + rand(-0.6, 0.6), dist = 700;
+      const e0 = rand(0.56, 0.78), e1 = rand(0.1, 0.28), y2 = yaw + rand(-0.12, 0.12);
+      fx.bolt(new THREE.Vector3(cam.x + Math.sin(yaw) * dist, Math.tan(e0) * dist, cam.z + Math.cos(yaw) * dist), new THREE.Vector3(cam.x + Math.sin(y2) * dist, Math.tan(e1) * dist, cam.z + Math.cos(y2) * dist), 0xcfe0ff, rand(0.22, 0.38));
+    }
     this.lightning = Math.max(0, this.lightning - dt * 3.5);
     const fl = this.lightning * (0.6 + 0.4 * Math.sin(t * 60));
     this.skyMat.uniforms.flash.value = fl;
