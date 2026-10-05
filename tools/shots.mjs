@@ -48,7 +48,6 @@ export const SHOTS = {
   rail:        { at: [250, 262, 0], free: { pos: [118, 4.5, 262], look: [210, 17, 250], fov: 62 }, settle: 30, setup: 'rail' },
   rail_view:   { at: [250, 280, 0], free: { pos: [214, 3.2, 281], look: [250, 16.5, 252], fov: 60 }, settle: 30, setup: 'rail' },
   judge:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 40, setup: 'judge' },
-  bike_side:   { at: [-300, 50, Math.PI / 2], free: { pos: [-299, 1.5, 54.5], look: [-299.3, 1.1, 50], fov: 42 }, settle: 60, setup: 'ride' },
   sky_moon:    { at: [0, 100, Math.PI], free: { pos: [10, 3, 56], look: [-40, 70, -60], fov: 70 }, settle: 20 },
   air_war: { at: [-452, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
   air_fin: { at: [52, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
