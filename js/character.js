@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { deg, lerp, smooth, clamp } from './util.js';
 import { buildBody } from './charmodel.js';
+export { makeLawgiver, makeBaton, makePistol, makeBat } from './props.js';
 
 // ---------------------------------------------------------------------------
 // Procedural humanoid rig + pose-based animation.
@@ -9,7 +10,7 @@ import { buildBody } from './charmodel.js';
 // Rotation conventions (limbs hang along -Y):  rotation.x < 0  swings the limb FORWARD.
 // ---------------------------------------------------------------------------
 
-const JOINTS = ['hips', 'torso', 'head', 'shL', 'shR', 'elL', 'elR', 'hipL', 'hipR', 'knL', 'knR'];
+const JOINTS = ['hips', 'torso', 'chest', 'head', 'shL', 'shR', 'elL', 'elR', 'wrL', 'wrR', 'hipL', 'hipR', 'knL', 'knR', 'anL', 'anR'];
 const ZERO = () => { const o = {}; for (const j of JOINTS) o[j] = [0, 0, 0]; o.root = [0, 0, 0]; o.pos = [0, 0, 0]; return o; };
 
 // Pose literal helper: degrees. Unspecified joints keep base.
@@ -123,11 +124,6 @@ for (const c of Object.values(CLIPS)) for (const f of c.frames) {
   }
 }
 
-const mat = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, metalness: 0.35, ...o });
-function box(w, h, d, m, x = 0, y = 0, z = 0) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); mesh.position.set(x, y, z); mesh.castShadow = true; return mesh;
-}
-
 // ---------------------------------------------------------------------------
 export const STYLES = {
   dredd: { scale: 0.9, bulk: 1.15, hero: true, eagle: true, gold: 0xd6a328, skin: 0xb98a6a, visor: 0xff3020 },
@@ -153,20 +149,27 @@ export class Character {
     this.roll = 0;
     // ---- joint hierarchy (animation drives these) ----
     this.hips = new THREE.Group(); this.hips.position.y = 1.0; this.rigRoot.add(this.hips);
-    this.torso = new THREE.Group(); this.torso.position.y = 0.1; this.hips.add(this.torso);
-    this.neck = new THREE.Group(); this.neck.position.set(0, 0.8, 0); this.torso.add(this.neck);
+    this.torso = new THREE.Group(); this.torso.position.y = 0.1; this.hips.add(this.torso);       // lower spine (abdomen)
+    this.chest = new THREE.Group(); this.chest.position.y = 0.3; this.torso.add(this.chest);       // upper spine: ribcage, shoulders, neck
+    this.neck = new THREE.Group(); this.neck.position.set(0, 0.5, 0); this.chest.add(this.neck);
     this.head = new THREE.Group(); this.head.position.y = 0.05; this.neck.add(this.head);
     const mkArm = (sx) => {
-      const sh = new THREE.Group(); sh.rotation.order = 'YXZ'; this.torso.add(sh);
+      const sh = new THREE.Group(); sh.rotation.order = 'YXZ'; this.chest.add(sh);
       const el = new THREE.Group(); el.position.y = -0.38; sh.add(el);
-      const hand = new THREE.Group(); hand.position.y = -0.38; el.add(hand);
-      return { sh, el, hand };
+      const wr = new THREE.Group(); wr.position.y = -0.38; el.add(wr);                              // wrist joint (hand + held props hang off it)
+      const hand = new THREE.Group(); wr.add(hand);
+      return { sh, el, wr, hand };
     };
     const aL = mkArm(1), aR = mkArm(-1);
-    this.shL = aL.sh; this.elL = aL.el; this.handL = aL.hand; this.shR = aR.sh; this.elR = aR.el; this.handR = aR.hand;
-    const mkLeg = () => { const hp = new THREE.Group(); hp.rotation.order = 'YXZ'; this.hips.add(hp); const kn = new THREE.Group(); kn.position.y = -0.46; hp.add(kn); return { hp, kn }; };
+    this.shL = aL.sh; this.elL = aL.el; this.wrL = aL.wr; this.handL = aL.hand; this.shR = aR.sh; this.elR = aR.el; this.wrR = aR.wr; this.handR = aR.hand;
+    const mkLeg = () => {
+      const hp = new THREE.Group(); hp.rotation.order = 'YXZ'; this.hips.add(hp);
+      const kn = new THREE.Group(); kn.position.y = -0.46; hp.add(kn);
+      const an = new THREE.Group(); an.position.y = -0.4; kn.add(an);                               // ankle joint (the boot hangs off it)
+      return { hp, kn, an };
+    };
     const lL = mkLeg(), lR = mkLeg();
-    this.hipL = lL.hp; this.knL = lL.kn; this.hipR = lR.hp; this.knR = lR.kn;
+    this.hipL = lL.hp; this.knL = lL.kn; this.anL = lL.an; this.hipR = lR.hp; this.knR = lR.kn; this.anR = lR.an;
     buildBody(this, styleName, st);
 
     // weapon anchors
@@ -194,8 +197,14 @@ export class Character {
     this.hips.rotation.set(cur.hips[0], cur.hips[1], cur.hips[2]);
     this.rigRoot.rotation.set(cur.root[0], cur.root[1], cur.root[2]);
     this.pivot.rotation.x = this.roll;
-    this.torso.rotation.set(cur.torso[0], cur.torso[1], cur.torso[2]);
-    this.head.rotation.set(cur.head[0], cur.head[1] - cur.torso[1] * 0.5 - cur.hips[1] * 0.4, cur.head[2]);
+    // the legacy 'torso' / 'head' pose keys are spread over the spine and neck chains, so every clip bends in an S-curve instead of hinging at the belt
+    const T = cur.torso, C = cur.chest, hy = cur.head[1] - T[1] * 0.5 - cur.hips[1] * 0.4;
+    this.torso.rotation.set(T[0] * 0.42, T[1] * 0.42, T[2] * 0.42);
+    this.chest.rotation.set(T[0] * 0.58 + C[0], T[1] * 0.58 + C[1], T[2] * 0.58 + C[2]);
+    this.neck.rotation.set(cur.head[0] * 0.4, hy * 0.4, cur.head[2] * 0.4);
+    this.head.rotation.set(cur.head[0] * 0.6, hy * 0.6, cur.head[2] * 0.6);
+    this.wrL.rotation.set(cur.wrL[0], cur.wrL[1], cur.wrL[2]); this.wrR.rotation.set(cur.wrR[0], cur.wrR[1], cur.wrR[2]);
+    this.anL.rotation.set(cur.anL[0], cur.anL[1], cur.anL[2]); this.anR.rotation.set(cur.anR[0], cur.anR[1], cur.anR[2]);
     this.shL.rotation.set(cur.shL[0], cur.shL[1], cur.shL[2]); this.shR.rotation.set(cur.shR[0], cur.shR[1], cur.shR[2]);
     this.elL.rotation.set(cur.elL[0], 0, 0); this.elR.rotation.set(cur.elR[0], 0, 0);
     this.hipL.rotation.set(cur.hipL[0], cur.hipL[1], cur.hipL[2]); this.hipR.rotation.set(cur.hipR[0], cur.hipR[1], cur.hipR[2]);
@@ -312,50 +321,3 @@ function walkStep(c, sp) {
   return false;
 }
 
-// ---------------------------------------------------------------------------
-// Props held in hands
-// ---------------------------------------------------------------------------
-export function makeLawgiver() {
-  const g = new THREE.Group();
-  const metal = mat(0x2a2c34, { roughness: 0.35, metalness: 0.85 });
-  const dark = mat(0x0d0e12, { roughness: 0.5, metalness: 0.6 });
-  const gold = mat(0xe8b52a, { roughness: 0.3, metalness: 0.95 });
-  const body = box(0.09, 0.14, 0.42, metal, 0, 0.06, 0.12); g.add(body);
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.34, 8), dark); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.1, 0.46); g.add(barrel);
-  const grip = box(0.075, 0.2, 0.09, dark, 0, -0.07, 0.0); grip.rotation.x = -0.25; g.add(grip);
-  g.add(box(0.1, 0.03, 0.2, gold, 0, 0.14, 0.12));
-  g.add(box(0.075, 0.075, 0.18, dark, 0, 0.0, 0.3));
-  const disp = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.1), new THREE.MeshBasicMaterial({ color: 0x40ff80, toneMapped: false }));
-  disp.position.set(0, 0.145, 0.04); g.add(disp); g.userData.disp = disp;
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.1, 0.64); g.add(muzzle); g.userData.muzzle = muzzle;
-  const wrap = new THREE.Group(); wrap.add(g); g.position.set(0, -0.05, 0.0);
-  wrap.userData = g.userData; wrap.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return wrap;
-}
-export function makeBaton(len = 0.85, tip = 0xfff0a0) {
-  const g = new THREE.Group();
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, len, 8), mat(0x15161a, { roughness: 0.4, metalness: 0.7 }));
-  shaft.position.y = -len * 0.35; g.add(shaft);
-  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 8), mat(0xe8b52a, { metalness: 1, roughness: 0.3 })); ring.position.y = -0.12; g.add(ring);
-  const tipM = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.1, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(tip).multiplyScalar(2.0), toneMapped: false })); tipM.position.y = -len * 0.35 - len / 2 + 0.04; g.add(tipM);
-  g.userData.tipLocal = new THREE.Vector3(0, -len * 0.35 - len / 2, 0);
-  g.userData.baseLocal = new THREE.Vector3(0, -len * 0.35 - len * 0.1, 0);
-  g.userData.tipMat = tipM.material;
-  g.rotation.x = -Math.PI / 2; // along +z after parent rotation
-  const wrap = new THREE.Group(); wrap.add(g); wrap.userData = g.userData; wrap.userData.inner = g;
-  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return wrap;
-}
-export function makePistol(color = 0x333333) {
-  const g = new THREE.Group();
-  g.add(box(0.06, 0.1, 0.26, mat(color, { roughness: 0.4, metalness: 0.8 }), 0, 0.03, 0.1));
-  g.add(box(0.05, 0.14, 0.06, mat(0x111111), 0, -0.07, 0));
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.05, 0.26); g.add(muzzle);
-  const wrap = new THREE.Group(); wrap.add(g); wrap.userData.muzzle = muzzle;
-  return wrap;
-}
-export function makeBat(color = 0x6a4a2a, len = 0.9) {
-  const g = new THREE.Group();
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.03, len, 8), mat(color, { roughness: 0.8, metalness: 0.1 })); m.position.y = -len * 0.3; g.add(m);
-  g.rotation.x = -Math.PI / 2; const wrap = new THREE.Group(); wrap.add(g); wrap.traverse((o) => { if (o.isMesh) o.castShadow = true; }); return wrap;
-}

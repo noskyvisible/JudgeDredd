@@ -219,7 +219,7 @@ export function ridePoseIK(ch, bike) {
     const arm = (side) => {
       const sh = side === 'L' ? ch.shL : ch.shR, anchor = side === 'L' ? u.anchors.gripL : u.anchors.gripR;
       _a.copy(anchor); u.front.localToWorld(_a);
-      ch.torso.worldToLocal(_a); _a.sub(sh.position);
+      ch.chest.worldToLocal(_a); _a.sub(sh.position);
       return planarIK(0.38, 0.47, _a.x, _a.y, _a.z);
     };
     const aL = arm('L'), aR = arm('R');

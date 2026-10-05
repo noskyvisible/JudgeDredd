@@ -17,7 +17,7 @@ import { Traffic } from './traffic.js';
 import { Pickups } from './pickups.js';
 import { CrimeManager } from './crimes.js';
 import { Player } from './player.js';
-import { Character, makeLawgiver, makeBaton } from './character.js';
+import { Character, STYLES, CLIPS, makeLawgiver, makeBaton, makePistol, makeBat } from './character.js';
 import { Lawmaster, ridePose } from './bike.js';
 import { hud, judgement } from './ui.js';
 import { clamp, damp, rand } from './util.js';
@@ -275,5 +275,5 @@ requestAnimationFrame(frame);
 window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom, QUALITY, setQuality });
+Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat });
 window.__render = () => { renderer.info.reset(); composer.render(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };
