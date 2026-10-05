@@ -7,6 +7,7 @@ import { rand, randInt, pick, chance, clamp, mulberry32, segAABB, makeCanvas, ca
 import * as TX from './textures.js';
 import { makeFacadeSet } from './facades.js';
 import { patchWall, patchRoad } from './shaders.js';
+import { reflection } from './reflect.js';
 import { buildHolograms } from './holo.js';
 const tmpDir = new THREE.Vector3();
 
@@ -250,18 +251,18 @@ export const world = {
         roughnessMap: s.ormMap, metalnessMap: s.ormMap, roughness: 1, metalness: 1, normalMap: s.normalMap, normalScale: new THREE.Vector2(0.9, 0.9),
         vertexColors: true, envMapIntensity: 1.1,
       });
-      return patchWall(m), m;
+      return patchWall(m, v), m;
     });
     const [roadMap, roadRough, roadNorm] = TX.makeRoad();
     const roadMat = new THREE.MeshStandardMaterial({ map: roadMap, roughnessMap: roadRough, normalMap: roadNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
-    patchRoad(roadMat, this.timeU);
+    patchRoad(roadMat, this.timeU, reflection.uniforms);
     const [intMap, intRough, intNorm] = TX.makeIntersection();
     const intMat = new THREE.MeshStandardMaterial({ map: intMap, roughnessMap: intRough, normalMap: intNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
-    patchRoad(intMat, this.timeU);
+    patchRoad(intMat, this.timeU, reflection.uniforms);
     const [swMap, swRough, swNorm] = TX.makeSidewalk();
     for (const t of [swMap, swRough, swNorm]) t.repeat.set(BLOCK / 8, BLOCK / 8);
     const swMat = new THREE.MeshStandardMaterial({ map: swMap, roughnessMap: swRough, normalMap: swNorm, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1, metalness: 0.05, envMapIntensity: 0.8 });
-    patchRoad(swMat, this.timeU);
+    patchRoad(swMat, this.timeU, reflection.uniforms);
     const grassTex = TX.makeGrass(); grassTex.repeat.set(10, 10);
     const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 });
     const signTex = TX.makeSignAtlas();
@@ -346,10 +347,10 @@ export const world = {
       }
       for (let m = 0; m <= N; m++) { const g = new THREE.PlaneGeometry(ROAD, ROAD); g.rotateX(-Math.PI / 2); g.translate(roadX(k), 0.002, roadX(m)); intGs.push(g); }
     }
-    const roadMesh = new THREE.Mesh(mergeGeometries(roadGs), roadMat); roadMesh.receiveShadow = true; scene.add(roadMesh);
-    const intMesh = new THREE.Mesh(mergeGeometries(intGs), intMat); intMesh.receiveShadow = true; scene.add(intMesh);
+    const roadMesh = new THREE.Mesh(mergeGeometries(roadGs), roadMat); roadMesh.receiveShadow = true; roadMesh.layers.set(1); scene.add(roadMesh);   // ground lives on layer 1: the mirror camera must not see it
+    const intMesh = new THREE.Mesh(mergeGeometries(intGs), intMat); intMesh.receiveShadow = true; intMesh.layers.set(1); scene.add(intMesh);
     const base = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x08080c, roughness: 0.9 }));
-    base.position.y = -0.1; base.receiveShadow = true; scene.add(base);
+    base.position.y = -0.1; base.receiveShadow = true; base.layers.set(1); scene.add(base);
 
     // ===== blocks =====
     const swGs = [], grassGs = [];
@@ -587,7 +588,7 @@ export const world = {
     scene.add(lampPole, lampHead);
 
     // ===== merge & add meshes =====
-    const sw = new THREE.Mesh(mergeGeometries(swGs), swMat); sw.receiveShadow = true; scene.add(sw);
+    const sw = new THREE.Mesh(mergeGeometries(swGs), swMat); sw.receiveShadow = true; sw.layers.set(1); scene.add(sw);
     // sidewalk uv: BoxGeometry uv 0..1 per face; repeat set on texture handles tiling
     if (grassGs.length) { const m = new THREE.Mesh(mergeGeometries(grassGs), grassMat); m.receiveShadow = true; scene.add(m); }
     wallG.forEach((arr, v) => {
@@ -761,7 +762,7 @@ export const world = {
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, lamps.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     lamps.forEach((l, i) => { p.set(l.x, 0.06, l.z); s.set(l.r * 2, 1, l.r * 2); m.compose(p, q, s); mesh.setMatrixAt(i, m); mesh.setColorAt(i, l.c); });
-    mesh.frustumCulled = false; mesh.renderOrder = 3; scene.add(mesh);
+    mesh.frustumCulled = false; mesh.renderOrder = 3; scene.add(mesh); (this.mirrorHide ||= []).push(mesh);
   },
 
   buildSmears(scene, list) {
@@ -792,7 +793,7 @@ export const world = {
           gl_FragColor = vec4(vCol.rgb * 1.2, a * vCol.a);
         }`,
     });
-    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; scene.add(mesh);
+    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; scene.add(mesh); (this.mirrorHide ||= []).push(mesh);
   },
 
   // soft light cones under the streetlamps nearest the player: rain streaks glitter inside them
@@ -820,7 +821,7 @@ export const world = {
           gl_FragColor = vec4(1.0, 0.8, 0.52, a);
         }`,
     });
-    this.cones = new THREE.InstancedMesh(geo, mat, 28); this.cones.frustumCulled = false; this.cones.renderOrder = 5; this.cones.count = 0; scene.add(this.cones);
+    this.cones = new THREE.InstancedMesh(geo, mat, 28); this.cones.frustumCulled = false; this.cones.renderOrder = 5; this.cones.count = 0; scene.add(this.cones); (this.mirrorHide ||= []).push(this.cones);
     this.coneT = 0;
   },
 
@@ -944,7 +945,7 @@ export const world = {
         }`,
       fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(0.62,0.74,1.0,vA); }',
     });
-    const rain = new THREE.LineSegments(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain);
+    const rain = new THREE.LineSegments(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain); (this.mirrorHide ||= []).push(rain);
   },
 
   buildFlyers(scene) {

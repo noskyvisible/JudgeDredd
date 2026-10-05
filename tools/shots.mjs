@@ -27,6 +27,10 @@ export const SHOTS = {
   neon_low:    { at: [452, -498, 0], free: { pos: [447, 1.1, -488], look: [455, 5, -560], fov: 66 }, settle: 60 },
   puddles:     { at: [-348, 52, 0], free: { pos: [-350, 0.9, 40], look: [-352, 2.5, 120], fov: 60 }, settle: 60 },
   aerial:      { at: [-150, 50, 0], free: { pos: [-260, 190, 260], look: [-120, 30, -40], fov: 62 }, settle: 60 },
+  facade:      { at: [-345, 90, 0], free: { pos: [-343, 3.2, 95], look: [-372, 17, 82], fov: 56 }, settle: 40 },
+  window_close:{ at: [-345, 90, 0], facadeOf: [-350, 90], dist: 9, lookY: 11, fov: 50, settle: 30 },
+  window_mid:  { at: [-345, 90, 0], facadeOf: [-350, 90], dist: 22, lookY: 16, fov: 55, settle: 30 },
+  facade_far:  { at: [-345, 90, 0], free: { pos: [-343, 6, 140], look: [-372, 24, 70], fov: 60 }, settle: 40 },
   rooftop:     { at: [150, 50, 0], free: { pos: [112, 105, 44], look: [190, 20, 52], fov: 70 }, settle: 60 },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
@@ -38,7 +42,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message.split('\n')[0]));
-page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text().slice(0, 200)); });
+page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text().slice(0, +process.env.SHOT_ERRLEN || 200)); });
 await page.addInitScript(() => { window.__noRender = true; });
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
@@ -67,6 +71,16 @@ for (const name of names) {
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     // settle: let lights hop, traffic spawn, the camera catch up
     for (let i = 0; i < sh.settle; i++) { if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; } window.__step(1); }
+    if (sh.facadeOf) { // frame the nearest tall building face: camera `dist` m out from it, a little off-axis, looking up at it
+      const [fx, fz] = sh.facadeOf; let best = null, bd = 1e9;
+      for (const b of T.world.boxes) {
+        if (b.h < 35) continue; const cx = (b.minX + b.maxX) / 2, cz = (b.minZ + b.maxZ) / 2;
+        for (const [x, z, nx, nz] of [[b.minX, cz, -1, 0], [b.maxX, cz, 1, 0], [cx, b.minZ, 0, -1], [cx, b.maxZ, 0, 1]]) { const d = Math.hypot(x - fx, z - fz); if (d < bd) { bd = d; best = { x, z, nx, nz }; } }
+      }
+      const d = sh.dist || 9, px = -best.nz, pz = best.nx;      // perpendicular, for the off-axis offset
+      const c = T.camera; c.position.set(best.x + best.nx * d + px * 3, 3.2, best.z + best.nz * d + pz * 3); c.fov = sh.fov || 55; c.updateProjectionMatrix();
+      c.lookAt(best.x, sh.lookY || 12, best.z); c.updateMatrixWorld(true);
+    }
     if (sh.free) { const c = T.camera; c.position.set(...sh.free.pos); c.fov = sh.free.fov || 62; c.updateProjectionMatrix(); c.lookAt(...sh.free.look); c.updateMatrixWorld(true); }
     const info = window.__render();
     return { info, png: T.renderer.domElement.toDataURL('image/png') };
@@ -74,5 +88,5 @@ for (const name of names) {
   fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(r.png.split(',')[1], 'base64'));
   console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k`);
 }
-console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 8).join('\n') : 'no page errors');
+console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, +process.env.SHOT_ERRN || 8).join('\n') : 'no page errors');
 await browser.close();
