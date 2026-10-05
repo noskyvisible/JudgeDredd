@@ -1,166 +1,306 @@
 import * as THREE from 'three';
-import { makeEagle } from './world.js';
 import { patchRim } from './shaders.js';
-import { rb, cap, cyl, add, bake, textures, makeMat } from './charkit.js';
+import { bake } from './charkit.js';
+import { eagleShape } from './world.js';
+import { heroTextures, ATLAS, atlasUV } from './charhero_tex.js';
+import {
+  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX,
+  rrect, ellipse, roundPoly, sstep, gauss, lin, wrapA, TAU, V,
+} from './charhero_geo.js';
+import { buildHelmet, buildFace, fistGeos, ribbedPauldron, eaglePauldron, bootFootGeos, smoothBox } from './charhero_parts.js';
 
 // ===========================================================================
-// Hero: Judge Joe Dredd.  Hand-built kit modelled on the classic comic art:
-// black glossy uniform, black helmet with RED visor and gold eagle crest, gold eagle-wing
-// pauldron (right) + big ribbed gold pauldron (left), gold chain to a chest badge, green
-// gauntlets / bracers / belt / knee pads / boots, eagle-shield buckle and a thigh holster.
-// Every bone's static meshes are baked into one mesh per material to keep draw calls low.
+// Hero: Judge Joe Dredd.  Built from lofted anatomy (super-ellipse cross-sections) wearing conformed
+// armour plates with real thickness and rolled edges: glossy clearcoated black uniform and helmet,
+// red visor, gold eagle crest, ribbed gold pauldron (left) and eagle-wing pauldron (right), gold chain
+// to the chest badge, worn green leather gauntlets / belt / knee pads / boots, eagle buckle, holster.
+// Pauldrons, elbow couters and knee cops ride on driven helper joints that follow a fraction of the
+// limb's rotation, so armour stays seated through extreme poses.  Each joint's static parts are baked
+// into one mesh per material (bake()).
 // ===========================================================================
+
+function heroMaterials() {
+  const T = heroTextures();
+  const rep = (tex, r) => { const t = tex.clone(); t.repeat.set(r, r); t.needsUpdate = true; return t; };
+  const lN = rep(T.leatherN, 4.6), lR = rep(T.leatherR, 4.6), lN2 = rep(T.leatherN, 6.5), lR2 = rep(T.leatherR, 3.2);
+  const gR = rep(T.goldR, 3.0), gN = rep(T.goldN, 3.0);
+  const P = (o) => new THREE.MeshPhysicalMaterial(o);
+  const M = {
+    // glossy black uniform: lacquered leather plates, a grain you only catch in the highlights
+    suit: P({ color: 0x0b0c10, roughness: 0.44, metalness: 0.0, roughnessMap: lR, normalMap: lN, normalScale: new THREE.Vector2(0.45, 0.45),
+      clearcoat: 1.0, clearcoatRoughness: 0.13, clearcoatNormalMap: lN, clearcoatNormalScale: new THREE.Vector2(0.18, 0.18), envMapIntensity: 1.7 }),
+    // matte undersuit at the joints
+    under: P({ color: 0x0f1015, roughness: 0.62, metalness: 0.0, roughnessMap: lR2, normalMap: lN2, normalScale: new THREE.Vector2(0.8, 0.8),
+      clearcoat: 0.25, clearcoatRoughness: 0.45, sheen: 0.5, sheenColor: new THREE.Color(0x3a4258), sheenRoughness: 0.55, envMapIntensity: 1.1 }),
+    helmet: P({ color: 0x07080b, roughness: 0.28, metalness: 0.1, clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 2.0 }),
+    gold: P({ color: 0xdcaa48, roughness: 1.0, metalness: 1.0, roughnessMap: gR, normalMap: gN, normalScale: new THREE.Vector2(0.35, 0.35),
+      emissive: 0x3a2508, emissiveIntensity: 0.6, envMapIntensity: 1.6 }),
+    goldDark: P({ color: 0xa87a2c, roughness: 1.0, metalness: 1.0, roughnessMap: gR, normalMap: gN, normalScale: new THREE.Vector2(0.35, 0.35),
+      emissive: 0x281a05, emissiveIntensity: 0.55, envMapIntensity: 1.4 }),
+    green: P({ color: 0x2e6232, roughness: 0.58, metalness: 0.0, roughnessMap: lR, normalMap: lN, normalScale: new THREE.Vector2(0.9, 0.9),
+      clearcoat: 0.35, clearcoatRoughness: 0.32, sheen: 0.35, sheenColor: new THREE.Color(0x6a9a5a), sheenRoughness: 0.5, envMapIntensity: 1.25 }),
+    greenDark: P({ color: 0x1b3f20, roughness: 0.6, metalness: 0.0, roughnessMap: lR, normalMap: lN, normalScale: new THREE.Vector2(1.0, 1.0),
+      clearcoat: 0.3, clearcoatRoughness: 0.35, envMapIntensity: 1.15 }),
+    visor: P({ color: 0x2a0303, roughness: 0.06, metalness: 0.2, clearcoat: 1.0, clearcoatRoughness: 0.02, emissive: 0xff2a14, emissiveMap: T.visorE,
+      emissiveIntensity: 1.6, envMapIntensity: 2.2 }),
+    skin: P({ color: 0xffffff, map: T.skin, roughness: 0.55, normalMap: rep(T.skinN, 1), normalScale: new THREE.Vector2(0.35, 0.35),
+      sheen: 0.3, sheenColor: new THREE.Color(0xff9a7a), sheenRoughness: 0.4, envMapIntensity: 0.8 }),
+    metal: P({ color: 0x2c2e34, roughness: 0.9, metalness: 0.9, roughnessMap: rep(T.brushedR, 6), envMapIntensity: 1.4 }),
+    rubber: P({ color: 0x0b0b0c, roughness: 0.82, metalness: 0.0, normalMap: lN2, normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.6 }),
+    decal: new THREE.MeshStandardMaterial({ map: T.decal.map, roughnessMap: T.decal.mr, metalnessMap: T.decal.mr, roughness: 1, metalness: 1,
+      emissive: 0x2a1a04, emissiveMap: T.decal.map, emissiveIntensity: 0.3, envMapIntensity: 1.5 }),
+  };
+  for (const k of ['suit', 'under', 'helmet', 'gold', 'goldDark', 'green', 'greenDark', 'skin', 'metal']) patchRim(M[k], 0x7aa6ff, 3.2, k === 'gold' || k === 'goldDark' ? 0.22 : 0.32);
+  return M;
+}
+
+const put = (g, geo, mat) => { const m = new THREE.Mesh(geo, mat); g.add(m); return m; };
+const putAll = (g, list) => { for (const [geo, mat] of list) put(g, geo, mat); };
+// shield outline (badge / buckle), centred, CCW
+function shield(w, h, n = 10) {
+  const pts = [[-w / 2, h / 2], [-w / 2, h / 2 - 0.6 * h]];
+  for (let i = 1; i <= n; i++) { const t = i / n, u = 1 - t; pts.push([u * u * (-w / 2) + 2 * u * t * (-w / 2) + t * t * 0, u * u * (h / 2 - 0.6 * h) + 2 * u * t * (-h / 2 + 0.1 * h) + t * t * (-h / 2)]); }
+  for (let i = 1; i <= n; i++) { const t = i / n, u = 1 - t; pts.push([u * u * 0 + 2 * u * t * (w / 2) + t * t * (w / 2), u * u * (-h / 2) + 2 * u * t * (-h / 2 + 0.1 * h) + t * t * (h / 2 - 0.6 * h)]); }
+  pts.push([w / 2, h / 2]);
+  return pts.reverse();   // -> CCW
+}
+
 export function buildHero(ch, st) {
-  const T = textures();
-  const suit = makeMat(0x0c0d11, { roughness: 0.3, metalness: 0.12, grain: 0.35, envMapIntensity: 1.3 });
-  const suit2 = makeMat(0x101116, { roughness: 0.62, metalness: 0.05, grain: 0.5 });
-  const helmet = makeMat(0x08090c, { roughness: 0.2, metalness: 0.55, envMapIntensity: 1.5 });
-  const gold = makeMat(0xd6a328, { roughness: 0.3, metalness: 0.7, emissive: 0x3a2506, emissiveIntensity: 0.5, envMapIntensity: 1.3 });
-  const goldDark = makeMat(0xa87a1c, { roughness: 0.38, metalness: 0.7, emissive: 0x2a1a04, emissiveIntensity: 0.4 });
-  const green = makeMat(0x2a5b30, { roughness: 0.5, metalness: 0.12, grain: 0.7, envMapIntensity: 1.1 });
-  const greenDark = makeMat(0x1d4023, { roughness: 0.55, metalness: 0.1, grain: 0.7 });
-  const visor = makeMat(0x7a0d0d, { roughness: 0.14, metalness: 0.35, emissive: 0xff2412, emissiveIntensity: 0.85, envMapIntensity: 1.2 });
-  const skin = makeMat(0xb98a6a, { roughness: 0.62 });
-  const teeth = makeMat(0xe6e0d2, { roughness: 0.4 });
-  const sole = makeMat(0x070708, { roughness: 0.8 });
-  const badgeMat = new THREE.MeshStandardMaterial({ map: T.badge, roughness: 0.35, metalness: 0.6, emissive: 0x2a1a04, emissiveMap: T.badge, emissiveIntensity: 0.25 });
-  const buckleMat = new THREE.MeshStandardMaterial({ map: T.buckle, roughness: 0.35, metalness: 0.6 });
-  for (const m of [suit, suit2, helmet, gold, goldDark, green, greenDark, skin]) patchRim(m, 0x7aa6ff, 3.2, 0.3);
-  ch.mats = { armor: suit, under: suit2, gold, skin, boots: green };
+  const M = heroMaterials();
+  ch.mats = { armor: M.suit, under: M.under, gold: M.gold, skin: M.skin, boots: M.green };
+  const { hips, torso, chest, neck, head } = ch;
+  const groups = [hips, torso, chest, neck, head];
 
-  const { hips } = ch;
-  // ---- pelvis, belt ----
-  add(hips, rb(0.56, 0.26, 0.34, 0.07), suit, 0, 0, 0);
-  add(hips, rb(0.64, 0.15, 0.4, 0.05), green, 0, 0.02, 0);
-  for (let i = 0; i < 9; i++) add(hips, new THREE.SphereGeometry(0.014, 6, 5), gold, -0.24 + i * 0.06, 0.085, 0.205);
-  for (const [x, z, r] of [[-0.25, 0.17, 0.35], [0.25, 0.17, -0.35], [-0.31, 0.02, 1.2], [0.31, 0.02, -1.2]]) add(hips, rb(0.11, 0.13, 0.08, 0.025), green, x, -0.02, z, 0, r * 0.5, 0);
-  add(hips, rb(0.22, 0.15, 0.05, 0.03), buckleMat, 0, 0.02, 0.215);
-  add(hips, rb(0.025, 0.12, 0.02, 0.008), goldDark, -0.125, 0.02, 0.215); add(hips, rb(0.025, 0.12, 0.02, 0.008), goldDark, 0.125, 0.02, 0.215);
-
-  // ---- torso ----
-  const { torso, chest } = ch;     // `chest` pivots 0.3 above `torso`, so upper-body parts below are authored 0.3 lower than the old single-joint torso
-  add(torso, rb(0.46, 0.26, 0.3, 0.08), suit2, 0, 0.09, 0);                          // abdomen
-  add(chest, rb(0.82, 0.5, 0.44, 0.14), suit, 0, 0.17, 0);                          // chest
-  for (const sx of [-1, 1]) add(chest, rb(0.34, 0.14, 0.34, 0.06), suit, sx * 0.3, 0.4, -0.01, 0, 0, -sx * 0.32);   // trapezius slopes
-  add(chest, cyl(0.12, 0.16, 0.12, 12), suit, 0, 0.48, 0);
-  add(chest, rb(0.62, 0.44, 0.1, 0.05), suit2, 0, 0.15, -0.21);                     // back plate
-  add(chest, rb(0.34, 0.34, 0.06, 0.05), suit2, 0, 0.2, 0.215);                     // sternum plate
-  // chest badge (character's left breast)
-  add(chest, new THREE.PlaneGeometry(0.17, 0.215), badgeMat, 0.19, 0.2, 0.222);
-  // chain from the eagle pauldron down to the badge
+  // =================================================================== pelvis + utility belt (hips)
+  const pelvis = new Surf([
+    { y: -0.215, rx: 0.07, rz: 0.08, cz: 0.0 },
+    { y: -0.19, rx: 0.14, rz: 0.12, cz: -0.004 },
+    { y: -0.13, rx: 0.238, rz: 0.158, cz: -0.006 },
+    { y: -0.06, rx: 0.282, rz: 0.176, cz: -0.01 },
+    { y: 0.02, rx: 0.285, rz: 0.178, cz: -0.012 },
+    { y: 0.1, rx: 0.272, rz: 0.17, cz: -0.012 },
+    { y: 0.15, rx: 0.266, rz: 0.166, cz: -0.012 },
+  ], { e: 2.3, mod: (a, y) => 0.013 * (gauss(wrapA(a - Math.PI), 0.42, 0.3) + gauss(wrapA(a - Math.PI), -0.42, 0.3)) * gauss(y, -0.1, 0.05) });
+  put(hips, loftGeo(pelvis, { ys: lin(-0.215, 0.15, 14), na: 44, cap0: 0.01 }), M.suit);
+  put(hips, bandGeo(pelvis, -0.045, 0.085, { t: 0.03, r: 0.012, na: 64 }), M.green);
+  // eagle-shield buckle
+  put(hips, plateGeo(pelvis, rrect(0.19, 0.145, 0.024), { center: [0, 0.02], t: 0.018, h0: 0.03, bevel: 0.007, crown: 0.004 }), M.gold);
+  put(hips, atlasUV(plateGeo(pelvis, rrect(0.15, 0.112, 0.014), { center: [0, 0.02], t: 0.003, h0: 0.05, bevel: 0.0012, uv: 'box', n: 40, nI: 2 }), ATLAS.buckle), M.decal);
   {
-    const S = new THREE.Vector3(-0.34, 0.46, 0.16), E = new THREE.Vector3(0.18, 0.33, 0.225), n = 15;
-    const P = (t) => new THREE.Vector3(S.x + (E.x - S.x) * t, S.y + (E.y - S.y) * t - 0.2 * Math.sin(Math.PI * t), 0.222 + 0.01 * Math.sin(Math.PI * t));
-    const linkGeo = new THREE.TorusGeometry(0.021, 0.0065, 5, 10); linkGeo.scale(1.4, 1, 1);
-    for (let i = 0; i < n; i++) {
-      const t = i / (n - 1), p = P(t), q = P(Math.min(1, t + 0.04)), pr = P(Math.max(0, t - 0.04)), tan = q.clone().sub(pr).normalize();
-      const m = new THREE.Mesh(linkGeo, gold); m.position.copy(p);
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), tan);
-      if (i % 2) m.rotateX(Math.PI / 2);
-      chest.add(m);
+    const shp = eagleShape().getPoints().map((p) => [p.x * 0.052, (p.y - 0.4) * 0.052]);
+    let g = extrudeGeo(shp, 0.008, { bevel: 0.002, seg: 1 });
+    g = deform(g, (v) => { v.z -= (v.x * v.x) / (2 * 0.3); }, { smooth: false });
+    const p = pelvis.at(0, 0.024, 0.058); put(hips, xf(g, frame(p, V(0, 1, 0), pelvis.nrm(0, 0.024))), M.gold);
+  }
+  // pouches all round: pillow-shaped plates conformed to the belt, each with a lid flap and a gold snap
+  const pouch = (a, y, w, h, d) => {
+    put(hips, plateGeo(pelvis, rrect(w, h, 0.016, 3), { center: [a, y], t: d, h0: 0.026, bevel: 0.014, crown: 0.008, n: 20, nI: 2, nB: 2 }), M.green);
+    put(hips, plateGeo(pelvis, roundPoly([[-w / 2 - 0.004, -h * 0.05], [w / 2 + 0.004, -h * 0.05], [w / 2 + 0.004, h * 0.52], [-w / 2 - 0.004, h * 0.52]], [0.012, 0.012, 0.006, 0.006], 3), { center: [a, y + h * 0.04], t: 0.008, h0: 0.026 + d + 0.002, bevel: 0.003, crown: 0.004, n: 16, nI: 1, nB: 1, sink: 0.012 }), M.greenDark);
+    put(hips, xf(rivetGeo(0.0075, 0.6, 7), frame(pelvis.at(a, y + h * 0.02, 0.026 + d + 0.011), pelvis.nrm(a, y))), M.gold);
+  };
+  for (const sx of [1, -1]) {
+    pouch(sx * 0.6, 0.012, 0.085, 0.1, 0.045);
+    pouch(sx * 0.98, 0.016, 0.075, 0.112, 0.05);
+    pouch(sx * 2.42, 0.014, 0.096, 0.094, 0.045);
+    // Lawgiver magazines in a triple carrier on the left hip, cuffs case on the right
+    if (sx > 0) for (let i = 0; i < 3; i++) { const a = 1.28 + i * 0.13; put(hips, xf(smoothBox(0.036, 0.03, 0.09, 0.008), frame(pelvis.at(a, 0.03, 0.045), pelvis.nrm(a, 0.03), V(0, 1, 0))), M.metal); put(hips, xf(smoothBox(0.04, 0.034, 0.02, 0.006), frame(pelvis.at(a, 0.08, 0.047), pelvis.nrm(a, 0.03), V(0, 1, 0))), M.gold); }
+    else { const a = -1.4; put(hips, xf(new THREE.CylinderGeometry(0.045, 0.045, 0.05, 16, 1).rotateX(Math.PI / 2), frame(pelvis.at(a, 0.02, 0.058), V(0, 1, 0), pelvis.nrm(a, 0.02))), M.greenDark); put(hips, xf(new THREE.TorusGeometry(0.038, 0.006, 5, 16), frame(pelvis.at(a, 0.02, 0.084), V(0, 1, 0), pelvis.nrm(a, 0.02))), M.metal); }
+  }
+  pouch(Math.PI, 0.016, 0.17, 0.08, 0.04);
+  // drop strap toward the thigh holster
+  put(hips, plateAY(pelvis, [[-1.62, -0.16], [-1.3, -0.16], [-1.32, -0.03], [-1.6, -0.03]], { round: 0.008, t: 0.008, h0: 0.028 }), M.greenDark);
+
+  // =================================================================== abdomen (torso joint)
+  const abd = new Surf([
+    { y: -0.12, rx: 0.262, rz: 0.16, cz: -0.012 },
+    { y: 0.0, rx: 0.252, rz: 0.158, cz: -0.008 },
+    { y: 0.12, rx: 0.262, rz: 0.164, cz: -0.002 },
+    { y: 0.22, rx: 0.288, rz: 0.176, cz: 0.0 },
+    { y: 0.34, rx: 0.318, rz: 0.186, cz: 0.0 },
+  ], { e: 2.3, mod: (a) => -0.008 * gauss(wrapA(a - Math.PI), 0, 0.09) });
+  put(torso, loftGeo(abd, { ys: lin(-0.12, 0.34, 10), na: 44 }), M.under);
+  for (let k = 0; k < 3; k++) {   // segmented abdominal lames, each overlapping the one below
+    const y0 = 0.0 + k * 0.083, y1 = y0 + 0.098;
+    put(torso, plateAY(abd, [[-1.72, y0], [1.72, y0], [1.72, y1], [-1.72, y1]], { round: 0.03, t: 0.014, h0: 0.003 + k * 0.006, bevel: 0.006, crown: 0.003, nI: 2, n: 40, nB: 2 }), M.suit);
+  }
+  for (let k = 0; k < 2; k++) { const y0 = 0.02 + k * 0.085, y1 = y0 + 0.1; put(torso, plateAY(abd, [[Math.PI - 1.2, y0], [Math.PI + 1.2, y0], [Math.PI + 1.2, y1], [Math.PI - 1.2, y1]], { round: 0.03, t: 0.014, h0: 0.003 + k * 0.006, bevel: 0.006, crown: 0.003, nI: 2, n: 36, nB: 2 }), M.suit); }
+
+  // =================================================================== chest
+  const chestMod = (a, y) => {
+    const A = Math.abs(a), b = wrapA(a - Math.PI);
+    let m = 0.022 * gauss(A, 0.42, 0.32) * gauss(y, 0.2, 0.1) * sstep(0.04, 0.12, y);    // pecs
+    m -= 0.006 * gauss(a, 0, 0.06) * sstep(0.03, 0.08, y) * (1 - sstep(0.36, 0.44, y));   // sternum
+    m += 0.02 * gauss(Math.abs(b), 1.05, 0.3) * gauss(y, 0.12, 0.12);                      // lats
+    m += 0.014 * gauss(Math.abs(b), 0.55, 0.22) * gauss(y, 0.29, 0.08);                    // scapulae
+    m -= 0.01 * gauss(b, 0, 0.08);                                                          // spine
+    return m;
+  };
+  const chestS = new Surf([
+    { y: -0.1, rx: 0.3, rz: 0.186, cz: 0.0 },
+    { y: -0.02, rx: 0.325, rz: 0.194, cz: 0.004 },
+    { y: 0.08, rx: 0.368, rz: 0.206, cz: 0.008 },
+    { y: 0.18, rx: 0.405, rz: 0.214, cz: 0.008 },
+    { y: 0.27, rx: 0.428, rz: 0.212, cz: 0.002 },
+    { y: 0.35, rx: 0.424, rz: 0.2, cz: -0.01 },
+    { y: 0.42, rx: 0.37, rz: 0.184, cz: -0.022 },
+    { y: 0.48, rx: 0.27, rz: 0.162, cz: -0.028 },
+    { y: 0.53, rx: 0.178, rz: 0.14, cz: -0.03 },
+    { y: 0.56, rx: 0.14, rz: 0.128, cz: -0.028 },
+  ], { e: 2.6, mod: chestMod });
+  put(chest, loftGeo(chestS, { ys: lin(-0.1, 0.56, 20), na: 52, cap0: 0.06, capSeg: 3 }), M.under);
+  // pectoral plates with a zipped centre channel
+  const pec = [[0.085, 0.43], [0.08, 0.1], [0.2, 0.045], [0.55, 0.032], [0.9, 0.07], [1.12, 0.16], [1.18, 0.3], [1.02, 0.41], [0.62, 0.46], [0.3, 0.468]];
+  for (const sx of [1, -1]) put(chest, plateAY(chestS, pec.map(([a, y]) => [a * sx, y]), { smooth: true, n: 48, t: 0.014, h0: 0.0, bevel: 0.0065, crown: 0.008, nI: 4 }), M.suit);
+  put(chest, plateGeo(chestS, rrect(0.022, 0.52, 0.007), { center: [0, 0.2], t: 0.006, h0: 0.0, bevel: 0.0025, nI: 3 }), M.metal);
+  for (let i = 0; i < 11; i++) { const y = -0.03 + i * 0.044; put(chest, xf(new THREE.BoxGeometry(0.02, 0.008, 0.006), frame(chestS.at(0, y, 0.007), chestS.nrm(0, y), V(0, 1, 0))), M.metal); }
+  // rivets along the outer pec edges
+  for (const sx of [1, -1]) for (const [a, y] of [[1.06, 0.18], [1.1, 0.27], [1.0, 0.37], [0.95, 0.1], [0.6, 0.06]]) put(chest, xf(rivetGeo(0.0075, 0.6, 7), frame(chestS.at(sx * a, y, 0.016), chestS.nrm(sx * a, y))), M.metal);
+  // back: scapular plate over a lower lame, vertebra guards down the spine, rivets
+  const bp = [[Math.PI - 1.26, 0.2], [Math.PI - 0.7, 0.17], [Math.PI, 0.16], [Math.PI + 0.7, 0.17], [Math.PI + 1.26, 0.2], [Math.PI + 1.24, 0.34], [Math.PI + 0.95, 0.46], [Math.PI + 0.45, 0.515], [Math.PI, 0.52], [Math.PI - 0.45, 0.515], [Math.PI - 0.95, 0.46], [Math.PI - 1.24, 0.34]];
+  put(chest, plateAY(chestS, bp, { smooth: true, n: 56, t: 0.017, h0: 0.0, bevel: 0.007, crown: 0.008, nI: 4 }), M.suit);
+  put(chest, plateAY(chestS, [[Math.PI - 1.28, 0.0], [Math.PI + 1.28, 0.0], [Math.PI + 1.3, 0.2], [Math.PI - 1.3, 0.2]], { round: 0.035, t: 0.014, h0: -0.002, bevel: 0.006, crown: 0.004, nI: 2, n: 40, nB: 2 }), M.suit);
+  for (let i = 0; i < 5; i++) { const y = 0.46 - i * 0.085; put(chest, plateAY(chestS, [[Math.PI - 0.07, y - 0.034], [Math.PI + 0.07, y - 0.034], [Math.PI + 0.055, y + 0.034], [Math.PI - 0.055, y + 0.034]], { round: 0.012, t: 0.012, h0: 0.017, bevel: 0.005, crown: 0.003, nI: 1, n: 16, nB: 2 }), M.suit); }
+  for (const sx of [1, -1]) for (const [b, y] of [[1.15, 0.24], [1.18, 0.33], [0.92, 0.44], [1.18, 0.1]]) { const a = Math.PI + sx * b; put(chest, xf(rivetGeo(0.008, 0.6, 7), frame(chestS.at(a, y, 0.019), chestS.nrm(a, y))), M.metal); }
+  // high collar: low under the chin, tall at the back
+  const collarS = new Surf([
+    { y: 0.42, rx: 0.205, rz: 0.19, cz: -0.03 },
+    { y: 0.5, rx: 0.19, rz: 0.178, cz: -0.033 },
+    { y: 0.58, rx: 0.177, rz: 0.17, cz: -0.036 },
+    { y: 0.66, rx: 0.173, rz: 0.168, cz: -0.038 },
+  ], { e: 2.2 });
+  put(chest, bandGeo(collarS, 0.425, (a) => 0.445 + 0.17 * Math.pow((1 - Math.cos(a)) / 2, 0.75), { t: 0.03, r: 0.013, na: 44 }), M.suit);
+  // chest badge + gold chain from the eagle pauldron
+  put(chest, plateGeo(chestS, shield(0.142, 0.172), { center: [0.52, 0.27], t: 0.01, h0: 0.016, bevel: 0.004, crown: 0.003, n: 44, nI: 3 }), M.gold);
+  put(chest, atlasUV(plateGeo(chestS, shield(0.122, 0.15), { center: [0.52, 0.272], t: 0.0025, h0: 0.0265, bevel: 0.001, uv: 'box', n: 44, nI: 2, nB: 1 }), ATLAS.badge), M.decal);
+  {
+    const a0 = -1.12, y0 = 0.43, a1 = 0.38, y1 = 0.335, path = [];
+    for (let i = 0; i <= 16; i++) { const t = i / 16; path.push(chestS.at(a0 + (a1 - a0) * t, y0 + (y1 - y0) * t - 0.13 * Math.sin(Math.PI * t), 0.034)); }
+    put(chest, chainGeo(path, { link: 0.019, wire: 0.0052, tube: 4, rad: 8 }), M.gold);
+    put(chest, xf(rivetGeo(0.014, 0.6, 10), frame(chestS.at(a0, y0, 0.026), chestS.nrm(a0, y0))), M.gold);
+  }
+
+  // =================================================================== neck + head
+  put(neck, loftGeo(new Surf([{ y: -0.14, rx: 0.115, rz: 0.12, cz: -0.02 }, { y: 0.14, rx: 0.108, rz: 0.112, cz: -0.02 }]), { ys: lin(-0.14, 0.14, 4), na: 24 }), M.under);
+  putAll(head, buildHelmet(M));
+  putAll(head, buildFace(M));
+
+  // =================================================================== arms
+  for (const side of ['L', 'R']) {
+    const sx = side === 'L' ? 1 : -1, sh = ch['sh' + side], el = ch['el' + side], hand = ch['hand' + side];
+    sh.position.set(sx * 0.52, 0.36, 0);
+    groups.push(sh, el, hand);
+    // upper arm: deltoid dome into biceps / triceps
+    const ua = new Surf([
+      { y: -0.45, rx: 0.084, rz: 0.088 },
+      { y: -0.38, rx: 0.094, rz: 0.098 },
+      { y: -0.3, rx: 0.109, rz: 0.113, cz: 0.006 },
+      { y: -0.2, rx: 0.124, rz: 0.13, cz: 0.014 },
+      { y: -0.1, rx: 0.133, rz: 0.135, cz: 0.006, cx: sx * 0.01 },
+      { y: -0.02, rx: 0.138, rz: 0.138, cx: sx * 0.012 },
+      { y: 0.04, rx: 0.13, rz: 0.131, cx: sx * 0.009 },
+      { y: 0.095, rx: 0.09, rz: 0.092, cx: sx * 0.003 },
+      { y: 0.132, rx: 0.0, rz: 0.0 },
+    ], { e: 2.1, mod: (a) => -0.0035 * gauss(wrapA(a - sx * Math.PI / 2), 0, 0.05) });
+    put(sh, loftGeo(ua, { ys: [...lin(-0.45, 0.04, 11), 0.07, 0.095, 0.112, 0.124, 0.132], na: 30 }), M.suit);
+    // elbow couter on a helper joint that takes half the elbow bend
+    const cop = driven(sh, (g) => { g.position.set(0, -0.38, 0); g.rotation.set(el.rotation.x * 0.5, 0, 0); }, 'couter' + side);
+    groups.push(cop);
+    const eS = new Surf([{ y: -0.12, rx: 0.094, rz: 0.096 }, { y: 0.0, rx: 0.103, rz: 0.106 }, { y: 0.12, rx: 0.098, rz: 0.101 }], { e: 2.1 });
+    put(cop, plateAY(eS, [[Math.PI - 1.15, -0.075], [Math.PI + 1.15, -0.075], [Math.PI + 1.15, 0.08], [Math.PI - 1.15, 0.08]], { round: 0.035, t: 0.016, h0: 0.003, bevel: 0.007, crown: 0.012, nI: 4 }), M.suit);
+    put(cop, plateAY(eS, [[Math.PI - 0.95, 0.07], [Math.PI + 0.95, 0.07], [Math.PI + 0.9, 0.125], [Math.PI - 0.9, 0.125]], { round: 0.02, t: 0.011, h0: 0.0, bevel: 0.005, nI: 3 }), M.suit);
+    put(cop, xf(rivetGeo(0.009, 0.6, 8), frame(eS.at(Math.PI, 0.0, 0.03), eS.nrm(Math.PI, 0))), M.metal);
+    // forearm + flared green gauntlet with straps
+    const fa = new Surf([{ y: -0.4, rx: 0.06, rz: 0.052 }, { y: -0.34, rx: 0.065, rz: 0.057 }, { y: -0.22, rx: 0.079, rz: 0.073 }, { y: -0.1, rx: 0.092, rz: 0.09, cz: 0.004 }, { y: -0.02, rx: 0.094, rz: 0.094 }, { y: 0.05, rx: 0.09, rz: 0.092 }, { y: 0.1, rx: 0.064, rz: 0.064 }], { e: 2.1 });
+    put(el, loftGeo(fa, { ys: lin(-0.38, 0.1, 10), na: 28 }), M.under);
+    const gS = new Surf([{ y: -0.4, rx: 0.073, rz: 0.065 }, { y: -0.34, rx: 0.078, rz: 0.07 }, { y: -0.26, rx: 0.09, rz: 0.084 }, { y: -0.17, rx: 0.102, rz: 0.098 }, { y: -0.1, rx: 0.11, rz: 0.106 }, { y: -0.068, rx: 0.119, rz: 0.116 }], { e: 2.3 });
+    put(el, loftGeo(gS, { ys: lin(-0.4, -0.068, 10), na: 32 }), M.green);
+    put(el, loftGeo(gS, { ys: lin(-0.15, -0.068, 3), na: 32, h: -0.007, flip: true }), M.greenDark);
+    put(el, rimGeo(gS, lin(0, TAU, 33).slice(0, 32).map((a) => [a, -0.071]), 0.009, -0.0035, { closed: true, seg: 6 }), M.greenDark);
+    for (const y of [-0.31, -0.2]) {
+      put(el, bandGeo(gS, y, y + 0.026, { t: 0.0075, r: 0.003, na: 24, nc: 2 }), M.greenDark);
+      put(el, plateGeo(gS, rrect(0.034, 0.034, 0.006, 2), { center: [sx * Math.PI / 2, y + 0.013], t: 0.006, h0: 0.0075, bevel: 0.002, n: 24, nI: 2 }), M.gold);
+      put(el, plateGeo(gS, rrect(0.012, 0.02, 0.004, 2), { center: [sx * Math.PI / 2, y + 0.013], t: 0.004, h0: 0.0135, bevel: 0.0015, n: 16, nI: 2 }), M.greenDark);
+    }
+    // hand
+    const fist = fistGeos(M);
+    if (sx < 0) for (const [g] of fist) mirrorX(g);
+    putAll(hand, fist);
+  }
+  // pauldrons on helper joints that follow part of the arm's swing
+  const pd = (side, kx, ky, kz) => {
+    const sh = ch['sh' + side], sx = side === 'L' ? 1 : -1;
+    const g = driven(chest, (o) => { o.position.set(sx * 0.52, 0.36, 0); o.rotation.set(sh.rotation.x * kx, sh.rotation.y * ky, sh.rotation.z * kz, 'YXZ'); }, 'pauldron' + side);
+    groups.push(g); return g;
+  };
+  putAll(pd('L', 0.34, 0.3, 0.5), ribbedPauldron(M, 1));
+  putAll(pd('R', 0.36, 0.3, 0.5), eaglePauldron(M, -1));
+
+  // =================================================================== legs
+  for (const side of ['L', 'R']) {
+    const sx = side === 'L' ? 1 : -1, hp = ch['hip' + side], kn = ch['kn' + side], an = ch['an' + side];
+    hp.position.set(sx * 0.17, -0.08, 0);
+    groups.push(hp, kn, an);
+    const thighMod = (a, y) => {
+      const out = wrapA(a - sx * Math.PI / 2);
+      return 0.012 * gauss(a, 0.15 * sx, 0.55) * gauss(y, -0.2, 0.12)        // quads
+        + 0.01 * gauss(a, -sx * 0.75, 0.3) * gauss(y, -0.38, 0.06)           // vastus medialis
+        + 0.01 * gauss(Math.abs(wrapA(a - Math.PI)), 0.3, 0.4) * gauss(y, -0.15, 0.12)   // hamstrings
+        - 0.003 * gauss(out, 0, 0.05);                                        // outer seam
+    };
+    const th = new Surf([
+      { y: -0.53, rx: 0.098, rz: 0.104 },
+      { y: -0.44, rx: 0.106, rz: 0.112, cz: 0.004 },
+      { y: -0.34, rx: 0.128, rz: 0.132, cz: 0.01 },
+      { y: -0.22, rx: 0.144, rz: 0.15, cz: 0.013 },
+      { y: -0.1, rx: 0.153, rz: 0.159, cz: 0.008, cx: -sx * 0.004 },
+      { y: 0.0, rx: 0.154, rz: 0.16, cx: -sx * 0.01 },
+      { y: 0.07, rx: 0.136, rz: 0.146, cz: -0.004, cx: -sx * 0.012 },
+      { y: 0.12, rx: 0.094, rz: 0.104, cz: -0.006, cx: -sx * 0.01 },
+      { y: 0.148, rx: 0.0, rz: 0.0, cx: -sx * 0.008 },
+    ], { e: 2.15, mod: thighMod });
+    put(hp, loftGeo(th, { ys: [...lin(-0.53, 0.07, 14), 0.1, 0.12, 0.136, 0.148], na: 36 }), M.suit);
+    // knee cop: helper joint with half the knee bend
+    const kc = driven(hp, (g) => { g.position.set(0, -0.46, 0); g.rotation.set(kn.rotation.x * 0.5, 0, 0); }, 'knee' + side);
+    groups.push(kc);
+    const kS = new Surf([{ y: -0.13, rx: 0.1, rz: 0.11, cz: 0.012 }, { y: 0.0, rx: 0.112, rz: 0.122, cz: 0.02 }, { y: 0.13, rx: 0.114, rz: 0.12, cz: 0.012 }], { e: 2.2 });
+    put(kc, plateAY(kS, [[-1.05, -0.105], [1.05, -0.105], [1.05, 0.12], [-1.05, 0.12]], { round: 0.04, t: 0.03, h0: 0.006, bevel: 0.013, crown: 0.016, nI: 4, n: 40 }), M.green);
+    put(kc, plateGeo(kS, ellipse(0.046, 0.062, 24), { center: [0, 0.008], t: 0.012, h0: 0.046, bevel: 0.0055, crown: 0.006, n: 24, nI: 2 }), M.greenDark);
+    for (const [a, y] of [[-0.62, -0.06], [0.62, -0.06], [-0.62, 0.08], [0.62, 0.08]]) put(kc, xf(rivetGeo(0.009, 0.65, 8), frame(kS.at(a, y, 0.047), kS.nrm(a, y))), M.gold);
+    put(kc, bandGeo(kS, 0.02, 0.05, { t: 0.008, r: 0.003, a0: 1.0, a1: TAU - 1.0, na: 16, nc: 2 }), M.greenDark);
+    // shin (mostly inside the boot) + tall green boot
+    put(kn, loftGeo(new Surf([{ y: -0.44, rx: 0.07, rz: 0.075 }, { y: -0.16, rx: 0.098, rz: 0.11, cz: -0.02 }, { y: 0.02, rx: 0.098, rz: 0.102 }, { y: 0.08, rx: 0.084, rz: 0.088 }], { e: 2.1 }), { ys: lin(-0.3, 0.08, 6), na: 28 }), M.under);
+    const bS = new Surf([
+      { y: -0.45, rx: 0.075, rz: 0.08, cz: 0.004 },
+      { y: -0.38, rx: 0.078, rz: 0.084 },
+      { y: -0.28, rx: 0.09, rz: 0.1, cz: -0.012 },
+      { y: -0.16, rx: 0.104, rz: 0.116, cz: -0.018 },
+      { y: -0.08, rx: 0.108, rz: 0.116, cz: -0.012 },
+      { y: -0.035, rx: 0.115, rz: 0.121, cz: -0.006 },
+    ], { e: 2.15 });
+    put(kn, loftGeo(bS, { ys: lin(-0.45, -0.038, 13), na: 40 }), M.green);
+    put(kn, loftGeo(bS, { ys: lin(-0.11, -0.038, 3), na: 40, h: -0.008, flip: true }), M.greenDark);
+    put(kn, rimGeo(bS, lin(0, TAU, 37).slice(0, 36).map((a) => [a, -0.041]), 0.009, -0.003, { closed: true, seg: 6 }), M.greenDark);
+    put(kn, plateAY(bS, [[-0.6, -0.37], [0.6, -0.37], [0.62, -0.09], [-0.62, -0.09]], { round: 0.03, t: 0.008, h0: 0.0, bevel: 0.004, crown: 0.004, nI: 3 }), M.green);   // shin guard
+    for (const y of [-0.31, -0.2]) {
+      put(kn, bandGeo(bS, y, y + 0.026, { t: 0.0075, r: 0.003, na: 28, nc: 2 }), M.greenDark);
+      put(kn, plateGeo(bS, rrect(0.036, 0.034, 0.006, 2), { center: [sx * Math.PI / 2, y + 0.013], t: 0.006, h0: 0.0075, bevel: 0.002, n: 24, nI: 2 }), M.gold);
+      put(kn, plateGeo(bS, rrect(0.013, 0.02, 0.004, 2), { center: [sx * Math.PI / 2, y + 0.013], t: 0.004, h0: 0.0135, bevel: 0.0015, n: 16, nI: 2 }), M.greenDark);
+    }
+    putAll(an, bootFootGeos(M, sx));
+  }
+  // thigh holster (right leg): moulded shell conformed to the thigh, open mouth, retention flap, two leg straps
+  {
+    const hp = ch.hipR, oa = -Math.PI / 2;
+    const th = new Surf([{ y: -0.5, rx: 0.1, rz: 0.106 }, { y: -0.34, rx: 0.125, rz: 0.129, cz: 0.01 }, { y: -0.22, rx: 0.139, rz: 0.145, cz: 0.012 }, { y: -0.1, rx: 0.149, rz: 0.155, cz: 0.008, cx: 0.004 }], { e: 2.15 });
+    put(hp, plateAY(th, [[oa - 0.42, -0.1], [oa + 0.5, -0.1], [oa + 0.46, -0.27], [oa + 0.2, -0.375], [oa - 0.12, -0.37], [oa - 0.38, -0.25]], { smooth: true, n: 40, t: 0.052, h0: 0.008, bevel: 0.018, crown: 0.012, nI: 3, nB: 3 }), M.suit);
+    put(hp, plateAY(th, [[oa - 0.3, -0.118], [oa + 0.36, -0.118], [oa + 0.33, -0.1], [oa - 0.27, -0.1]], { round: 0.006, t: 0.006, h0: 0.058, bevel: 0.002, n: 20, nI: 2 }), M.under);
+    put(hp, plateAY(th, [[oa - 0.2, -0.205], [oa + 0.05, -0.205], [oa + 0.05, -0.095], [oa - 0.2, -0.095]], { round: 0.012, t: 0.008, h0: 0.066, bevel: 0.003, crown: 0.003, n: 24, nI: 2, sink: 0.012 }), M.suit);
+    put(hp, xf(rivetGeo(0.0085, 0.6, 7), frame(th.at(oa - 0.075, -0.19, 0.076), th.nrm(oa - 0.075, -0.19))), M.gold);
+    for (const y of [-0.17, -0.31]) {
+      put(hp, bandGeo(th, y, y + 0.03, { t: 0.008, r: 0.003, na: 28, nc: 2 }), M.greenDark);
+      put(hp, plateGeo(th, rrect(0.034, 0.036, 0.006, 2), { center: [0.35, y + 0.015], t: 0.006, h0: 0.008, bevel: 0.002, n: 20, nI: 2 }), M.gold);
     }
   }
-  // ---- neck & helmet ----
-  const { neck, head } = ch;
-  add(neck, cyl(0.1, 0.12, 0.16), suit2, 0, -0.04, 0);
-  add(neck, rb(0.36, 0.1, 0.28, 0.04), suit, 0, -0.1, 0);
-  // dome
-  add(head, new THREE.SphereGeometry(0.235, 22, 16), helmet, 0, 0.17, 0, 0, 0, 0, 1.06, 1.0, 1.12);
-  add(head, rb(0.06, 0.1, 0.42, 0.03), helmet, 0, 0.385, -0.02);                    // crest
-  // red visor band (front 150°) with black frame
-  const vg = new THREE.CylinderGeometry(0.247, 0.247, 0.1, 28, 1, true, -0.44 * Math.PI, 0.88 * Math.PI);
-  add(head, vg, visor, 0, 0.15, 0, 0, 0, 0, 1.07, 1, 1.13).material.side = THREE.DoubleSide;
-  for (const dy of [0.058, -0.058]) add(head, new THREE.CylinderGeometry(0.251, 0.251, 0.02, 28, 1, true, -0.46 * Math.PI, 0.92 * Math.PI), helmet, 0, 0.15 + dy, 0, 0, 0, 0, 1.07, 1, 1.13).material.side = THREE.DoubleSide;
-  // gold eagle crest on the brow
-  const crest = makeEagle(gold, 0.2, 0.025); crest.position.set(0, 0.3, 0.215); crest.rotation.set(-0.95, 0, 0); crest.userData.noBake = false; head.add(crest);
-  // face: jaw, nose, grimace
-  add(head, rb(0.3, 0.2, 0.22, 0.06), skin, 0, 0.0, 0.105);
-  add(head, rb(0.05, 0.08, 0.06, 0.02), skin, 0, 0.085, 0.245);
-  add(head, rb(0.14, 0.02, 0.012, 0.005), sole, 0, 0.032, 0.218);                  // mouth slit
-  add(head, rb(0.125, 0.022, 0.01, 0.004), teeth, 0, 0.045, 0.22);                  // clenched teeth
-  add(head, rb(0.2, 0.07, 0.13, 0.04), skin, 0, -0.07, 0.17);                       // chin
-  add(head, rb(0.34, 0.035, 0.05, 0.015), helmet, 0, -0.1, 0.16);                   // chin strap
-  for (const x of [-0.215, 0.215]) add(head, rb(0.06, 0.26, 0.32, 0.025), helmet, x, 0.05, 0.03);   // cheek guards
-  add(head, rb(0.42, 0.2, 0.1, 0.04), helmet, 0, 0.02, -0.16);                      // neck guard
 
-  // ---- arms ----
-  const arm = (side) => {
-    const sx = side === 'L' ? 1 : -1, sh = side === 'L' ? ch.shL : ch.shR, el = side === 'L' ? ch.elL : ch.elR, hand = side === 'L' ? ch.handL : ch.handR;
-    sh.position.set(sx * 0.52, 0.36, 0);
-    add(sh, new THREE.SphereGeometry(0.105, 12, 10), suit, 0, 0, 0);
-    add(sh, cap(0.098, 0.2), suit, 0, -0.2, 0);                                     // upper arm
-    add(el, rb(0.14, 0.1, 0.14, 0.04), suit, 0, 0.0, 0);                             // elbow pad
-    add(el, cyl(0.078, 0.062, 0.3, 12), green, 0, -0.2, 0);                          // bracer
-    add(el, cyl(0.088, 0.088, 0.045, 12), greenDark, 0, -0.07, 0);                   // cuff
-    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; add(el, new THREE.SphereGeometry(0.011, 5, 4), gold, Math.sin(a) * 0.082, -0.07, Math.cos(a) * 0.082); }
-    for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + 0.4; add(el, new THREE.SphereGeometry(0.011, 5, 4), gold, Math.sin(a) * 0.066, -0.3, Math.cos(a) * 0.066); }
-    // gauntlet
-    add(hand, cyl(0.082, 0.1, 0.09, 12), greenDark, 0, 0.0, 0);
-    add(hand, rb(0.16, 0.18, 0.17, 0.055), green, 0, -0.1, 0);
-    for (let i = -1; i <= 1; i++) add(hand, rb(0.04, 0.035, 0.15, 0.012), greenDark, i * 0.045, -0.2, 0.0);
-    add(hand, cap(0.03, 0.07), green, sx * -0.085, -0.08, 0.05, 0, 0, 0.3);
-    for (let i = 0; i < 4; i++) add(hand, new THREE.SphereGeometry(0.01, 5, 4), gold, -0.06 + i * 0.04, -0.045, 0.09);
-    return { sh, sx };
-  };
-  const aL = arm('L'), aR = arm('R');
-  // right shoulder: golden eagle-wing pauldron (fan of feathers + head), turned to show its face
-  {
-    const sh = aR.sh, sx = -1;
-    add(sh, new THREE.SphereGeometry(0.18, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), goldDark, sx * 0.04, 0.03, 0, 0, 0, -sx * 0.25, 1.2, 0.85, 1.15);
-    const wing = new THREE.Group(); wing.position.set(sx * 0.1, 0.05, 0.0); wing.rotation.set(0, 0.75, sx * -0.18);
-    const pivot = new THREE.Vector3(0, 0.03, 0.14);
-    const layers = [{ off: 0.0, k: 1.0, w: 0.1, mat: gold }, { off: 0.045, k: 0.74, w: 0.09, mat: goldDark }];
-    layers.forEach((ly, li) => {
-      for (let i = 0; i < 8; i++) {
-        const a = (8 + i * 11) * Math.PI / 180, L = (0.34 + 0.08 * Math.sin(i * 0.8)) * ly.k + (i >= 6 ? 0.05 : 0);
-        const dir = new THREE.Vector3(0, Math.sin(a), -Math.cos(a));
-        const p = pivot.clone().addScaledVector(dir, L / 2); p.x += sx * ly.off;
-        add(wing, rb(0.03, L, ly.w, 0.012), ly.mat, p.x, p.y, p.z, a - Math.PI / 2, 0, 0);
-      }
-    });
-    add(wing, new THREE.SphereGeometry(0.058, 10, 8), gold, sx * 0.0, 0.2, 0.2);
-    add(wing, new THREE.ConeGeometry(0.034, 0.12, 6), goldDark, 0, 0.18, 0.285, Math.PI / 2 + 0.55, 0, 0);
-    add(wing, rb(0.07, 0.1, 0.1, 0.03), gold, 0, 0.12, 0.17);
-    add(wing, rb(0.04, 0.3, 0.3, 0.05), goldDark, sx * 0.03, 0.2, -0.02, 0.5, 0, 0);
-    wing.scale.setScalar(1.35);
-    bake(wing); sh.add(wing);
-  }
-  // left shoulder: big ribbed fist-style pauldron (bands run left-right, bulging outward)
-  {
-    const sh = aL.sh, sx = 1;
-    add(sh, new THREE.SphereGeometry(0.19, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), goldDark, sx * 0.04, -0.01, 0, 0, 0, -sx * 0.2, 1.2, 0.8, 1.1);
-    const ridge = [[0.235, 0.3, 0.052], [0.165, 0.4, 0.058], [0.09, 0.44, 0.06], [0.015, 0.42, 0.058], [-0.06, 0.34, 0.05]];
-    ridge.forEach(([y, len, r], i) => {
-      add(sh, cap(r, len - 2 * r, 5, 10), i % 2 ? goldDark : gold, sx * (0.11 + (i === 0 ? -0.01 : 0)), y, 0.0, 0, 0, Math.PI / 2 - sx * 0.18, 1, 1, 2.0);
-    });
-    for (const [y, x] of [[0.2, 0.2], [0.1, 0.28], [0.0, 0.27]]) add(sh, new THREE.SphereGeometry(0.014, 6, 5), goldDark, sx * x, y, 0.1);
-  }
-
-  // ---- legs ----
-  const leg = (side) => {
-    const sx = side === 'L' ? 1 : -1, hp = side === 'L' ? ch.hipL : ch.hipR, kn = side === 'L' ? ch.knL : ch.knR;
-    hp.position.set(sx * 0.17, -0.08, 0);
-    add(hp, new THREE.SphereGeometry(0.13, 12, 10), suit, 0, 0, 0);
-    add(hp, cap(0.125, 0.21), suit, 0, -0.23, 0, 0, 0, 0, 1, 1, 1.05);                // thigh
-    // knee pad (big rounded green) + straps
-    add(kn, rb(0.235, 0.23, 0.16, 0.085), green, 0, 0.0, 0.095);
-    for (const [x, y] of [[-0.075, 0.06], [0.075, 0.06], [-0.075, -0.06], [0.075, -0.06]]) add(kn, new THREE.SphereGeometry(0.014, 6, 5), gold, x, y, 0.178);
-    add(kn, rb(0.2, 0.04, 0.17, 0.015), suit, 0, 0.14, 0.04);
-    // boot / shin
-    add(kn, cap(0.088, 0.22), green, 0, -0.25, 0.005);
-    add(kn, rb(0.2, 0.065, 0.2, 0.03), greenDark, 0, -0.1, 0);
-    for (const y of [-0.2, -0.3]) add(kn, cyl(0.093, 0.093, 0.025, 12), suit, 0, y, 0);
-    add(kn, new THREE.SphereGeometry(0.013, 5, 4), gold, 0, -0.2, 0.093); add(kn, new THREE.SphereGeometry(0.013, 5, 4), gold, 0, -0.3, 0.093);
-    const an = side === 'L' ? ch.anL : ch.anR;
-    add(an, rb(0.175, 0.11, 0.35, 0.05), green, 0, -0.01, 0.075);
-    add(an, rb(0.185, 0.04, 0.37, 0.02), sole, 0, -0.055, 0.075);
-    return { hp, sx };
-  };
-  leg('L'); const lr = leg('R');
-  // thigh holster on the right leg
-  add(ch.hipR, rb(0.1, 0.26, 0.19, 0.035), suit2, -0.12, -0.24, 0.02);
-  add(ch.hipR, cyl(0.125, 0.125, 0.03, 12), suit, 0, -0.18, 0); add(ch.hipR, cyl(0.12, 0.12, 0.03, 12), suit, 0, -0.34, 0);
-  add(ch.hipR, rb(0.03, 0.05, 0.05, 0.01), goldDark, -0.17, -0.2, 0.05);
-
-  for (const g of [ch.hips, ch.torso, ch.chest, ch.neck, ch.head, ch.shL, ch.shR, ch.elL, ch.elR, ch.handL, ch.handR, ch.hipL, ch.hipR, ch.knL, ch.knR, ch.anL, ch.anR]) bake(g);
+  for (const g of groups) bake(g);
 }
