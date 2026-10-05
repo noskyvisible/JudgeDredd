@@ -26,7 +26,7 @@ const ATK = {
   finisher: { dmg: 80, reach: 5.5, heavy: true, speed: 0.95, ribbon: true, aoe: true, knock: 16, finisher: true },
   counter: { dmg: 45, reach: 3.5, heavy: true, speed: 1.1, ribbon: true, knock: 10 },
 };
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _f = new THREE.Vector3(), _r = new THREE.Vector3(), _hd = new THREE.Vector3(), _lk = new THREE.Vector3();
 
 export class Player {
   constructor(scene) {
@@ -108,8 +108,11 @@ export class Player {
     if (dir && type !== 'fire' && type !== 'crash' && G.mode === 'foot') G.hud?.hitDir(-dir.x, -dir.z);
     if (type !== 'fire') { audio.hurt(); fx.shake(Math.min(1, amount / 25)); }
     if (dir && G.mode === 'foot') { this.vel.x += dir.x * 5; this.vel.z += dir.z * 5; }
+    // direction-aware flinch: secondary-motion kick + directional hurt clip, remembered for the death fall
+    const hd = dir && G.mode === 'foot' && Math.abs(dir.x) + Math.abs(dir.z) > 1e-4 ? this.ch.localDir(dir, _hd) : null;
+    if (hd) { this.ch.impulse(hd, Math.min(2, 0.3 + amount / 22)); this.lastHitDir = (this.lastHitDir || new THREE.Vector3()).copy(hd); }
     if (type === 'melee' || type === 'bullet') {
-      if (this.state === 'attack' || this.state === 'free') { this.state = 'hurt'; this.stateT = 0; this.ch.play('hurt', { speed: 1.3 }); this.queued = false; this.finishAttackVisual(); }
+      if (this.state === 'attack' || this.state === 'free') { this.state = 'hurt'; this.stateT = 0; this.ch.play('hurt', { speed: 1.3, dir: hd }); this.queued = false; this.finishAttackVisual(); }
     }
     if (this.hp <= 0) this.die();
   }
@@ -120,7 +123,7 @@ export class Player {
   }
   die() {
     this.alive = false; this.hp = 0; this.deadT = 0; this.targetRing.visible = false;
-    this.ch.play('die', { speed: 1.2 });
+    this.ch.play('die', { speed: 1.2, dir: this.lastHitDir || null });
     if (G.mode === 'bike') G.dismount(true);
     G.onPlayerDeath?.();
   }
@@ -251,6 +254,10 @@ export class Player {
     ch.aim = damp(ch.aim, this.aiming ? 1 : 0, 14, dt);
     this.computeAimPoint();
     ch.aimPitch = this.aimPitchValue || 0;
+    ch.hipFire = this.hipFireT > 0 && !input.mouse(2) && !this.aimToggle;
+    // Dredd keeps his eyes on the fight: the strike target, else the nearest hostile, else down the sights
+    const lt = this.atkTarget && !this.atkTarget.removed && (this.state === 'attack' || this.state === 'finisher' || this.state === 'counter') ? this.atkTarget : G.enemies.nearest(this.pos, 18);
+    ch.lookAt(G.mode !== 'foot' ? null : this.aiming ? this.aimPoint : lt ? lt.centre(_lk) : null);
     // baton electricity glow
     const gl = 1.8 + Math.sin(G.time * 30) * 0.4 + (this.state === 'attack' ? 1.5 : 0);
     this.baton.userData.tipMat.color.setRGB(gl, gl * 0.95, gl * 0.45);

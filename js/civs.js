@@ -16,7 +16,7 @@ function ringPos(cx, cz, p, out) {
   else if (side === 2) out.set(cx - t, 0, cz + h); else out.set(cx - h, 0, cz - t);
   return out;
 }
-const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _hd = new THREE.Vector3(), _lk = new THREE.Vector3();
 
 export class Civilian {
   constructor(opts = {}) {
@@ -53,9 +53,11 @@ export class Civilian {
   hurt(d, info = {}) {
     if (this.state === 'dead') return;
     this.hp -= d;
+    const hd = info.dir && Math.abs(info.dir.x) + Math.abs(info.dir.z) > 1e-4 ? this.ch.localDir(info.dir, _hd) : null;
+    if (hd) this.ch.impulse(hd, Math.min(2, 0.5 + d / 15));
     fx.text(this.pos.clone().setY(2.3), 'CIVILIAN!', 'bad');
     G.player?.civilianHit(this);
-    if (this.hp <= 0) { this.state = 'dead'; this.dead = true; this.ch.play('die', { speed: 1.5 }); this.hostage = false; this.onDeath?.(); G.player?.civilianDeath(this); }
+    if (this.hp <= 0) { this.state = 'dead'; this.dead = true; this.ch.play('die', { speed: 1.5, dir: hd }); this.hostage = false; this.onDeath?.(); G.player?.civilianDeath(this); }
     else this.panic(this.pos, 0);
   }
   panic(from, strength) {
@@ -63,7 +65,7 @@ export class Civilian {
     this.state = 'panic'; this.stateT = 0; this.ch.stopClip();
     this.panicDir.set(this.pos.x - from.x, 0, this.pos.z - from.z); if (this.panicDir.lengthSq() < 0.01) this.panicDir.set(rand(-1, 1), 0, rand(-1, 1)); this.panicDir.normalize();
   }
-  cower() { if (this.state === 'dead') return; this.state = 'cower'; this.ch.play('surrender'); }
+  cower() { if (this.state === 'dead') return; this.state = 'cower'; this.ch.play('cower'); }
   setHostage() { this.hostage = true; this.state = 'cower'; this.ch.play('surrender'); }
   update(dt) {
     const ch = this.ch; ch.speed = 0;
@@ -77,12 +79,16 @@ export class Civilian {
     } else if (this.state === 'panic') {
       this.pos.addScaledVector(this.panicDir, 6.5 * dt); this.yaw = dampAngle(this.yaw, Math.atan2(this.panicDir.x, this.panicDir.z), 8, dt); ch.speed = 6.5;
       world.collideCircle(this.pos, 0.4);
-      if (this.stateT > 7 && !this.victim) { this.state = 'cower'; this.ch.play('surrender'); this.stateT = 0; }
+      if (this.stateT > 7 && !this.victim) { this.state = 'cower'; this.ch.play('cower'); this.stateT = 0; }
     } else if (this.state === 'cower') {
       if (!this.victim && !this.hostage && this.stateT > 6) { this.ch.stopClip(); this.ch.root.visible = false; this.state = 'gone'; }
     } else if (this.state === 'dead') {
       this.stateT > 8 && (this.ch.root.visible = false);
     }
+    // flail when panicking; glance at the Judge when he is close (or keep an eye on him when scared)
+    ch.stance = this.state === 'panic' ? 'panic' : null;
+    const dj = pl ? Math.hypot(pl.pos.x - this.pos.x, pl.pos.z - this.pos.z) : 99;
+    ch.lookAt(pl && this.state !== 'dead' && dj < (this.state === 'walk' ? 7 : 16) ? pl.centre(_lk) : null);
     const ev = ch.update(dt);
     for (const e of ev) if (e === 'step' && pl && this.pos.distanceTo(pl.pos) < 20) audio.step(this.pos, 0.5);
     ch.root.position.copy(this.pos); ch.root.rotation.y = this.yaw;
@@ -98,7 +104,7 @@ export class CivManager {
   }
   spawnVictim(pos, mode = 'cower') {
     const c = new Civilian({ victim: true }); c.pos.copy(pos); c.ch.root.visible = true; c.victim = true; c.state = 'cower';
-    c.ch.play('surrender'); this.list.push(c); c.yaw = rand(0, 6.28); return c;
+    c.ch.play(mode === 'cower' ? 'handsup' : mode); this.list.push(c); c.yaw = rand(0, 6.28); return c;
   }
   panic(pos, radius) {
     for (const c of this.list) if (!c.removed && c.ch.root.visible && Math.hypot(c.pos.x - pos.x, c.pos.z - pos.z) < radius) c.panic(pos, radius);
