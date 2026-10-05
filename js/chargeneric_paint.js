@@ -321,9 +321,10 @@ function logo(P, kind, x, y, s, st) {
 function camo(P, o = {}) {
   const w = P.w, h = P.h, n = Math.round((w * h) / (o.density ?? 1400));
   const blob = (x, y, r, st) => { const pts = []; const k = 7 + Math.floor(P.rng() * 4); for (let i = 0; i < k; i++) { const a = i / k * Math.PI * 2, rr = r * (0.55 + P.rng() * 0.7); pts.push([x + Math.cos(a) * rr * 1.5, y + Math.sin(a) * rr]); } P.shape((c) => { c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i <= k; i++) { const p0 = pts[i % k], pm = pts[(i - 1) % k]; c.quadraticCurveTo(pm[0], pm[1], (pm[0] + p0[0]) / 2, (pm[1] + p0[1]) / 2); } c.closePath(); }, st); };
-  for (let i = 0; i < n; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * (0.6 + P.rng()), { slot: o.slot1 || 'B', shade: 175 });
-  for (let i = 0; i < n * 0.8; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.7 * (0.5 + P.rng()), o.slot2 ? { slot: o.slot2, shade: 150 } : { slot: 'A', shade: 115 });
-  for (let i = 0; i < n * 0.6; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.3, { slot: o.slot1 || 'B', shade: 120 });
+  // tonal: darker and lighter blobs of the base colour, softened blobs of the secondary colour
+  for (let i = 0; i < n; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * (0.6 + P.rng()), { slot: 'A', shade: 140 });
+  for (let i = 0; i < n * 0.8; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.7 * (0.5 + P.rng()), { slot: o.slot1 || 'B', shade: 175, alpha: 0.55 });
+  for (let i = 0; i < n * 0.6; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.45 * (0.5 + P.rng()), o.slot2 ? { slot: o.slot2, shade: 165, alpha: 0.5 } : { slot: 'A', shade: 212 });
 }
 // generic torso garment painter
 export function paintTorso(P, o) {
@@ -434,9 +435,9 @@ export function paintShirt(P, o) {
   const w = P.w, h = P.h, U = (u) => u * w, V = (y) => (1 - (y - 1.06) / 0.86) * h;
   fabric(P, 'B', o.fabric || 'cotton', { shade: o.shade });
   if (o.stripes) for (let y = 0; y < h; y += o.stripes) P.rect(-2, y, w + 4, o.stripes * 0.45, { mul: 0.55 });
-  if (o.plaid) { for (let x = 0; x < w; x += 22) P.rect(x, 0, 8, h, { slot: 'C', shade: 150, alpha: 0.35 }); for (let y = 0; y < h; y += 22) P.rect(0, y, w, 8, { slot: 'C', shade: 150, alpha: 0.35 }); }
+  if (o.plaid) { for (let x = 0; x < w; x += 12) { P.rect(x, 0, 4, h, { slot: 'C', shade: 150, alpha: 0.32 }); P.rect(x + 7, 0, 1, h, { slot: 'A', shade: 210, alpha: 0.5 }); } for (let y = 0; y < h; y += 12) { P.rect(0, y, w, 4, { slot: 'C', shade: 150, alpha: 0.32 }); P.rect(0, y + 7, w, 1, { slot: 'A', shade: 210, alpha: 0.5 }); } }
   if (o.neck === 'crew') { P.ellipse(U(0), V(1.9), U(0.09), h * 0.07, { mul: 0.8, lw: 4 }); P.ellipse(U(1), V(1.9), U(0.09), h * 0.07, { mul: 0.8, lw: 4 }); }
-  if (o.buttons) { for (const x of [3, w - 3]) P.line([[x, V(1.88)], [x, h]], { mul: 0.82, lw: 2 }); for (let y = V(1.8); y < h; y += 16) for (const x of [4, w - 4]) P.ellipse(x, y, 1.8, 1.8, { slot: 'D', shade: 200, h: 190 }); }
+  if (o.buttons) { for (const x of [3, w - 3]) P.line([[x, V(1.88)], [x, h]], { mul: 0.82, lw: 2 }); for (let y = V(1.8); y < h; y += 16) for (const x of [4, w - 4]) P.ellipse(x, y, 1.25, 1.25, { slot: 'D', shade: 170, h: 180 }); }
   if (o.print) { for (const x of [0, w]) logo(P, o.print, x, V(1.55), h * 0.16, { slot: 'C', shade: 200, h: 140, hA: 0.3 }); }
   if (o.tank) { // arm holes darker (they read through the jacket gap only) and a scooped neck
     P.ellipse(U(0), V(1.92), U(0.13), h * 0.16, { slot: 'A', mul: 1, alpha: 0 });

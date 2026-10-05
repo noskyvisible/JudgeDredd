@@ -48,6 +48,7 @@ const ATLAS = {
     S('respirator', 64, 64, P.paintPlate, { slot: 'B', rough: 0.55, metal: 0.1, lines: [[0.5, 0, 0.5, 1]], scuffs: 10, grime: 0.2 }),
     S('goggles', 64, 32, P.paintPlate, { slot: 'B', rough: 0.4, metal: 0.2, lines: [], scuffs: 8 }),
     S('holster', 64, 64, P.paintPouch, { slot: 'B', fabric: 'leather' }),
+    S('bandana', 128, 64, P.paintBandana, {}),
   ],
   brute: () => [
     ...common(),
@@ -197,7 +198,7 @@ L.gunman = [
   { body: { b: 1.02 }, head: { jawW: 0.92, brow: 0.014 }, face: 'faceGunB', eyes: 'eyeA', hair: { kind: 'buzz' }, hat: { kind: 'cap', swatch: 'capTac' }, mask: { kind: 'respirator', swatch: 'respirator' },
     top: { kind: 'jacket', swatch: 'fieldCamo', sleeveSwatch: 'fieldCamoSleeve', len: 'hip', collar: 'shirt', collarSwatch: 'fieldCollar', collarGap: 0.42 }, shirt: { swatch: 'shirtTac' },
     legs: { swatch: 'legCamo', pelvis: 'pelvisCamo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'bandolier' }, { kind: 'holster' }] },
-  { body: { b: 0.98 }, head: { jawW: 0.86 }, face: 'faceGunA', eyes: 'eyeB', hair: { kind: 'buzz' }, hat: { kind: 'beanie', swatch: 'beanie' }, eyewear: { kind: 'goggles', glow: true, overHat: false }, mask: { kind: 'bandanaFace', swatch: 'respirator' },
+  { body: { b: 0.98 }, head: { jawW: 0.86 }, face: 'faceGunA', eyes: 'eyeB', hair: { kind: 'buzz' }, hat: { kind: 'beanie', swatch: 'beanie' }, eyewear: { kind: 'goggles', glow: true, overHat: false }, mask: { kind: 'bandanaFace', swatch: 'bandana' },
     top: { kind: 'vest', straps: true, swatch: 'plateCarrier', len: 'waist', y0: 1.12, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'rolled', sleeveSwatch: 'sleeveTac' }, armSkin: 'armHairy',
     legs: { swatch: 'legCargo', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac', fingerless: true }, acc: [{ kind: 'belt' }, { kind: 'pouches' }, { kind: 'holster' }] },
   { body: { b: 1.05 }, head: { jawW: 0.95, chin: 0.016 }, face: 'faceGunB', eyes: 'eyeA', hair: { kind: 'buzz' }, eyewear: { kind: 'shades', glow: false },

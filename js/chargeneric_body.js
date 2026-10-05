@@ -34,9 +34,10 @@ export function bonePositions(W, HW) {
 // Torso profile: y -> [rx, rz, cz, e]   (bulk applied by the caller)
 // ---------------------------------------------------------------------------
 const TORSO = [
-  [0.79, 0.150, 0.112, -0.004, 2.2],
-  [0.86, 0.236, 0.140, -0.008, 2.4],
-  [0.94, 0.252, 0.152, -0.010, 2.5],
+  [0.79, 0.100, 0.050, -0.012, 2.0],
+  [0.84, 0.190, 0.090, -0.014, 2.4],
+  [0.89, 0.244, 0.136, -0.012, 2.5],
+  [0.95, 0.254, 0.152, -0.010, 2.5],
   [1.02, 0.236, 0.147, -0.006, 2.4],
   [1.10, 0.213, 0.139, 0.000, 2.3],
   [1.20, 0.211, 0.138, 0.004, 2.3],
@@ -51,7 +52,11 @@ const TORSO = [
   [1.90, 0.100, 0.086, -0.014, 2.1],
   [1.93, 0.082, 0.076, -0.012, 2.0],
 ];
-export function torsoAt(B, y, off = 0) {
+export function torsoAt(B, y, off = 0, hang = false) {
+  if (hang && y < 0.96) { // hanging garments (coats, skirts) drape straight down from the hips instead of following the crotch
+    const T = torsoAt(B, 0.96, off), fl = 1 + 0.05 * (0.96 - y) / 0.1;
+    return { rx: T.rx * fl, rz: T.rz * (1 + 0.03 * (0.96 - y) / 0.1), cz: T.cz, e: T.e };
+  }
   let [rx, rz, cz, e] = table(TORSO, y);
   const b = B.b, f = B.fem || 0;
   // female: narrower ribcage/waist, wider hips
@@ -74,9 +79,9 @@ export function torsoAt(B, y, off = 0) {
   return { rx: rx + off, rz: rz + off, cz: cz + hz, e };
 }
 // angular shaping (pecs, bust, belly, butt, shoulder blades)
-function torsoBulge(B, y) {
-  const f = B.fem || 0, pec = (1 - f) * 0.05 * (B.pec ?? 1) * gauss((y - 1.6) / 0.06), bust = f * (B.bust ?? 0.16) * gauss((y - 1.55) / 0.065);
-  const butt = 0.07 * gauss((y - 0.93) / 0.07) * (1 + f * 0.6), blade = 0.035 * gauss((y - 1.6) / 0.08);
+function torsoBulge(B, y, damp = 1) {
+  const f = B.fem || 0, pec = damp * (1 - f) * 0.05 * (B.pec ?? 1) * gauss((y - 1.6) / 0.06), bust = Math.max(damp, 0.75) * f * (B.bust ?? 0.16) * gauss((y - 1.55) / 0.065);
+  const butt = damp * 0.06 * gauss((y - 0.95) / 0.06) * (1 + f * 0.6), blade = damp * 0.035 * gauss((y - 1.6) / 0.08);
   return (t) => {
     let k = 1;
     const tt = Math.atan2(Math.sin(t), Math.cos(t));
@@ -88,7 +93,8 @@ function torsoBulge(B, y) {
   };
 }
 // thick garments hide anatomy: fade the bulges with the layer offset
-const dampBulge = (f, off) => { const k = 1 - clamp((off || 0) / 0.03, 0, 1) * 0.75; return k >= 0.999 ? f : (t) => 1 + (f(t) - 1) * k; };
+const bulgeDamp = (off) => 1 - clamp((off || 0) / 0.03, 0, 1) * 0.75;
+const dampBulge = (f) => f; // (damping now happens inside torsoBulge so the bust survives thick garments)
 // the three torso bones and their surface ownership ranges
 const SPINE = [
   { bone: 'hips', lo: -1, hi: 1.065, ext: [-1, 1.13] },
@@ -115,7 +121,7 @@ export function torsoLayer(K, B, L) {
     ys.sort((a, b) => a - b);
     const rings = [];
     const mk = (y, extra = 0, kOwn = 1, dy = 0) => {
-      const T = torsoAt(B, y, L.off + extra), bul = dampBulge(torsoBulge(B, y), L.off), gap = L.gap ? L.gap(y) : 0;
+      const T = torsoAt(B, y, L.off + extra, L.hang), bul = torsoBulge(B, L.hang ? Math.max(y, 0.96) : y, bulgeDamp(L.off)), gap = L.gap ? L.gap(y) : 0;
       const k = kOwn * (L.scale ? L.scale(y) : 1);
       return { c: [0, y + dy, T.cz], rx: T.rx * k, rz: T.rz * k, e: T.e, f: bul, a0: gap, a1: TAU - gap, v: clamp((y - ya) / (yb - ya), 0, 1), yy: y };
     };
@@ -126,7 +132,7 @@ export function torsoLayer(K, B, L) {
     const P = loftVar(rings, { seg, inside: false, u0: L.u0, u1: L.u1 });
     // analytic normals from the continuous (un-shrunk) surface: no lighting crease where spine pieces meet
     const surf = (y, t) => {
-      const T = torsoAt(B, y, L.off), bul = dampBulge(torsoBulge(B, y), L.off), k = L.scale ? L.scale(y) : 1, e = T.e, sn = Math.sin(t), cs = Math.cos(t);
+      const T = torsoAt(B, y, L.off, L.hang), bul = torsoBulge(B, L.hang ? Math.max(y, 0.96) : y, bulgeDamp(L.off)), k = L.scale ? L.scale(y) : 1, e = T.e, sn = Math.sin(t), cs = Math.cos(t);
       return [Math.sign(sn) * Math.pow(Math.abs(sn), 2 / e) * T.rx * k * bul(t), y, T.cz + Math.sign(cs) * Math.pow(Math.abs(cs), 2 / e) * T.rz * k * bul(t)];
     };
     const cols = seg + 1;
@@ -369,7 +375,7 @@ function buildTorso(c) {
         const rings = [];
         for (let i = 0; i <= 5; i++) {
           const y = 1.62 + i * 0.05, T = torsoAt(B, y, (top.off ?? 0.04) * lerp(1, 0.5, i / 5)), w = lerp(w0, w1, sstep(1.62, 1.82, y));
-          rings.push({ c: [0, y, T.cz], rx: T.rx, rz: T.rz, e: T.e, f: dampBulge(torsoBulge(B, y), 0.03), a0: cen - w, a1: cen + w, v: clamp((y - 0.86) / 1.06, 0, 1) });
+          rings.push({ c: [0, y, T.cz], rx: T.rx, rz: T.rz, e: T.e, f: torsoBulge(B, y, bulgeDamp(0.03)), a0: cen - w, a1: cen + w, v: clamp((y - 0.86) / 1.06, 0, 1) });
         }
         const P = loftVar(rings, { seg: 12 });
         for (let i = 0; i < P.uv.length; i += 2) if (P.uv[i] < 0) P.uv[i] += 1;
@@ -390,7 +396,7 @@ function buildTorso(c) {
         K.add('chest', top.slot || 'armor', P, { rect, group: 'torso' });
       }
     } else {
-      torsoLayer(K, B, { slot: top.slot || 'armor', rect, off: top.off ?? 0.024, y0, y1: top.y1 ?? 1.905, gap: gapFn, seg: top.seg ?? 26, vRange: [top.vY0 ?? 0.86, 1.92], hemBot: true, scale: top.scale, aoK: 1 });
+      torsoLayer(K, B, { slot: top.slot || 'armor', rect, off: top.off ?? 0.024, y0, y1: top.y1 ?? 1.905, gap: gapFn, seg: top.seg ?? 26, vRange: [top.vY0 ?? 0.86, 1.92], hemBot: true, scale: top.scale, aoK: 1, hang: true });
     }
   }
   // collar
@@ -572,7 +578,7 @@ function buildLegs(c) {
   // skirt waist (on the hips bone, covers the top of the thigh panels)
   if (legs.skirt) {
     const srect = UN.uv(legs.skirt.swatch || 'skirtPlain');
-    torsoLayer(K, B, { slot: 'under', rect: srect, off: 0.035, y0: 0.82, y1: 1.12, seg: 22, vRange: [0.6, 1.12], group: 'torso', hemBot: true, scale: (y) => 1 + 0.18 * sstep(1.05, 0.82, y) });
+    torsoLayer(K, B, { slot: 'under', rect: srect, off: 0.035, y0: 0.84, y1: 1.12, seg: 22, vRange: [0.6, 1.12], group: 'torso', hemBot: true, hang: true, scale: (y) => 1 + 0.14 * sstep(1.05, 0.84, y) });
   }
 }
 
