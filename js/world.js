@@ -639,8 +639,9 @@ export const world = {
     // The heavy layers (building walls, metal trim: ~1.3 M triangles that also cast shadows) are merged per coarse spatial chunk, so frustum culling and the
     // shadow / mirror passes (which cull against their own frusta) skip the parts of the city that are far away.  Chunks are coarse on purpose: every chunk
     // is one more draw call in every pass, and the small layers (neon, shopfronts, signs) cost more in draw calls than they could save in triangles, so they stay whole.
-    const CHUNK = +(globalThis.__CHUNK || 500);
+    const CHUNK = +(globalThis.__CHUNK || 0);            // 0 = single mesh per material (see the profile notes above); tools/shots.mjs --chunk N overrides it for experiments
     const chunked = (geos, material, setup) => {
+      if (!CHUNK) { const m = new THREE.Mesh(mergeGeometries(geos), material); setup?.(m); scene.add(m); return; }
       // the outer skyline beyond the city wall would otherwise scatter into dozens of one-tower cells: cell indices are clamped into the city footprint
       const cells = new Map(), c = new THREE.Vector3(), lo = Math.floor(-HALF / CHUNK), hi = Math.floor(HALF / CHUNK), ix = (v) => Math.max(lo, Math.min(hi, Math.floor(v / CHUNK)));
       for (const g of geos) { g.computeBoundingBox(); g.boundingBox.getCenter(c); const k = ix(c.x) + ',' + ix(c.z); let a = cells.get(k); if (!a) cells.set(k, a = []); a.push(g); }
