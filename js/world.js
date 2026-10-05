@@ -725,6 +725,48 @@ export const world = {
     // paving inlay leading to the door (flat, so nobody trips on it)
     for (let i = 0; i < 5; i++) neonBox(cx, 0.28, cz + 15 + i * 4.2, 58 - i * 7, 0.05, 0.35, 0xffc040, 0.9);
     neonBox(cx, 0.28, cz + 15, 0.4, 0.05, 17, 0xffc040, 0.9);
+    { // gold eagle emblem inlaid in the plaza (glossy, so it mirrors the façade in the rain) + two waving banners between the columns
+      const eagleCanvas = (W, H, draw) => { const [c, x] = makeCanvas(W, H); draw(x, W, H); return canvasTex(c); };
+      const eaglePath = (x, cx0, cy0, size) => {
+        const pts = eagleShape().getPoints(); const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
+        const w = Math.max(...xs) - Math.min(...xs), hh = Math.max(...ys) - Math.min(...ys), k = size / Math.max(w, hh), mx = (Math.max(...xs) + Math.min(...xs)) / 2, my = (Math.max(...ys) + Math.min(...ys)) / 2;
+        x.beginPath(); pts.forEach((q, i) => { const px = cx0 + (q.x - mx) * k, py = cy0 - (q.y - my) * k; i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.closePath();
+      };
+      const emblem = eagleCanvas(1024, 1024, (x, W) => {
+        const g = x.createLinearGradient(0, 120, 0, 900); g.addColorStop(0, '#fff0a0'); g.addColorStop(0.5, '#e8b030'); g.addColorStop(1, '#8a5a10');
+        x.fillStyle = 'rgba(12,10,18,0.92)'; x.beginPath(); x.arc(512, 512, 500, 0, 7); x.fill();
+        x.strokeStyle = g; x.lineWidth = 16; x.beginPath(); x.arc(512, 512, 488, 0, 7); x.stroke(); x.lineWidth = 6; x.beginPath(); x.arc(512, 512, 372, 0, 7); x.stroke();
+        for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; x.fillStyle = g; x.beginPath(); x.moveTo(512 + Math.cos(a) * 372, 512 + Math.sin(a) * 372); x.lineTo(512 + Math.cos(a + 0.09) * 440, 512 + Math.sin(a + 0.09) * 440); x.lineTo(512 + Math.cos(a - 0.09) * 440, 512 + Math.sin(a - 0.09) * 440); x.fill(); }
+        x.fillStyle = g; eaglePath(x, 512, 500, 560); x.fill(); x.strokeStyle = '#2a1804'; x.lineWidth = 5; x.stroke();
+        x.font = '900 40px Impact, "Arial Black", sans-serif'; x.fillStyle = g; x.textAlign = 'center'; x.textBaseline = 'middle';
+        const txt = 'JUSTICE DEPARTMENT  ·  MEGA-CITY ONE  ·  JUSTICE DEPARTMENT  ·  MEGA-CITY ONE  ·  ';
+        for (let i = 0; i < txt.length; i++) { const a = -Math.PI / 2 + (i + 0.5) / txt.length * Math.PI * 2; x.save(); x.translate(512 + Math.cos(a) * 430, 512 + Math.sin(a) * 430); x.rotate(a + Math.PI / 2); x.fillText(txt[i], 0, 0); x.restore(); }
+      });
+      const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
+      const emMat = new THREE.MeshStandardMaterial({ map: emblem, roughnessMap: white, roughness: 0.28, metalness: 0.5, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false, emissive: 0x5a3a08, emissiveMap: emblem, emissiveIntensity: 0.55 });
+      patchRoad(emMat, this.timeU, reflection.uniforms);
+      const emMesh = new THREE.Mesh(new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2), emMat); emMesh.position.set(cx, 0.27, cz + 31);   // the plaza paving is the 0.24 m sidewalk slab
+      emMesh.layers.set(1); emMesh.receiveShadow = true; scene.add(emMesh); this.emblemMesh = emMesh;
+      const bannerTex = eagleCanvas(256, 1024, (x, W, H) => {
+        const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#5a0d12'); g.addColorStop(1, '#2a0508'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        const gg = x.createLinearGradient(0, 0, 0, H); gg.addColorStop(0, '#fff0a0'); gg.addColorStop(0.5, '#e8b030'); gg.addColorStop(1, '#8a5a10');
+        x.strokeStyle = gg; x.lineWidth = 10; x.strokeRect(12, 12, W - 24, H - 24); x.lineWidth = 3; x.strokeRect(26, 26, W - 52, H - 52);
+        x.fillStyle = gg; eaglePath(x, W / 2, 330, 190); x.fill();
+        x.font = '900 64px Impact, "Arial Black", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        'JUSTICE'.split('').forEach((ch, i) => x.fillText(ch, W / 2, 560 + i * 62));
+        x.beginPath(); x.moveTo(W / 2, H - 60); x.lineTo(W / 2 - 40, H - 20); x.lineTo(W / 2 + 40, H - 20); x.closePath(); x.fill();
+      });
+      const bMat = new THREE.MeshStandardMaterial({ map: bannerTex, emissiveMap: bannerTex, emissive: 0xffffff, emissiveIntensity: 0.32, roughness: 0.85, side: THREE.DoubleSide });
+      bMat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = this.timeU;
+        shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+float sway = (1.0 - uv.y);
+transformed.z += (sin(uTime * 1.7 + position.y * 0.32) * 0.55 + sin(uTime * 3.1 + position.y * 0.9) * 0.14) * sway;
+transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
+      };
+      bMat.customProgramCacheKey = () => 'banner-wave';
+      for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 24, 4, 14), bMat); b.position.set(cx + sx * 14, 36, cz + 9.7); scene.add(b); darkBox(cx + sx * 14, 48.4, cz + 9.7, 7.2, 0.5, 0.7, 0.35); }
+    }
     // monumental Judge statues flanking the approach
     for (const sx of [-1, 1]) {
       const x0 = cx + sx * 21, z0 = cz + 27;

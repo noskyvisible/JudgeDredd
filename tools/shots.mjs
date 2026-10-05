@@ -40,6 +40,8 @@ export const SHOTS = {
   boom_b:      { at: [-250, 50, 0], free: { pos: [-243, 2.4, 42], look: [-248.5, 2.5, 39], fov: 60 }, settle: 20, setup: 'boom', boomSteps: 18 },
   boom_c:      { at: [-250, 50, 0], free: { pos: [-243, 2.4, 42], look: [-248.5, 2.5, 39], fov: 60 }, settle: 20, setup: 'boom', boomSteps: 40 },
   boom:        { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.18, dist: 7 }, settle: 30, setup: 'boom' },
+  plaza:       { at: [0, 100, Math.PI], free: { pos: [4, 24, 66], look: [0, 0, 30], fov: 55 }, settle: 30 },
+  banners:     { at: [0, 100, Math.PI], free: { pos: [-6, 5, 54], look: [6, 40, 4], fov: 62 }, settle: 30 },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
