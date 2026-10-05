@@ -43,15 +43,17 @@ const { composer, post } = P;
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [
-  { name: 'LOW', pr: 0.75, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
-  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
-  { name: 'HIGH', pr: PR, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
+  { name: 'LOW', pr: 0.75, px: 1.2e6, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
+  { name: 'MEDIUM', pr: 1.0, px: 2.2e6, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
+  { name: 'HIGH', pr: Math.min(PR, 1.25), px: 3.0e6, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
 ];
 G.quality = 2; if (navigator.webdriver) G.autoQ = true;
+// internal resolution = the tier's pixel ratio, capped by a pixel budget so a 4K / 1440p window does not push 8M pixels through the heavier passes
+const prFor = (q) => Math.min(QUALITY[q].pr, Math.sqrt(QUALITY[q].px / Math.max(1, innerWidth * innerHeight)));
 function setQuality(q, announce) {
-  G.quality = q; const Q = QUALITY[q];
-  renderer.setPixelRatio(Q.pr); P.setSize(innerWidth, innerHeight, Q.pr); P.setQuality(Q);
-  world.sun.castShadow = Q.shadows; fx.setScale(innerHeight * Q.pr);
+  G.quality = q; const Q = QUALITY[q], pr = prFor(q);
+  renderer.setPixelRatio(pr); P.setSize(innerWidth, innerHeight, pr); P.setQuality(Q);
+  world.sun.castShadow = Q.shadows; fx.setScale(innerHeight * pr);
   reflection.setEnabled(Q.refl > 0, Q.refl);
   if (announce) hud.feed(`GRAPHICS: ${Q.name}`, 'good');
 }
@@ -160,7 +162,7 @@ G.voiceOn = true;
 
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h); P.setSize(w, h, QUALITY[G.quality].pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
+  const pr = prFor(G.quality); renderer.setPixelRatio(pr); renderer.setSize(w, h); P.setSize(w, h, pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * pr);
 }
 addEventListener('resize', resize);
 
