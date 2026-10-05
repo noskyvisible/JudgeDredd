@@ -6,6 +6,7 @@ import { createPost } from './post.js';
 import { eagleShape } from './world.js';
 import { buildStreetProps, updateStreetProps, streetPropStreams } from './streetprops.js';
 import { buildMonorail } from './monorail.js';
+import { buildHallStatues } from './hallstatues.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -62,6 +63,7 @@ fx.init(scene);
 reflection.hide.push(...(world.mirrorHide || []));
 buildStreetProps(scene);
 const monorail = buildMonorail(scene);
+buildHallStatues(scene);
 setQuality(G.quality);
 fx.setScale(innerHeight * PR);
 

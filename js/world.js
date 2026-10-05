@@ -771,16 +771,7 @@ transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
     for (const sx of [-1, 1]) {
       const x0 = cx + sx * 21, z0 = cz + 27;
       stone(new THREE.BoxGeometry(7.5, 2.4, 7.5), x0, 1.2, z0, 0.95); stone(new THREE.BoxGeometry(6.2, 1.2, 6.2), x0, 3.0, z0, 1.05);
-      const gp = (g, x, y, z) => { g.translate(x0 + x, y, z0 + z); goldG.push(g); };
-      for (const lx of [-0.95, 0.95]) gp(new THREE.CylinderGeometry(0.75, 0.9, 5.6, 10), lx, 6.4, 0);                   // legs
-      gp(new THREE.BoxGeometry(3.4, 0.7, 2.2), 0, 9.5, 0);                                                             // belt
-      gp(new THREE.BoxGeometry(3.6, 4.6, 2.2), 0, 12.2, 0);                                                            // torso
-      gp(new THREE.CylinderGeometry(1.2, 1.2, 1.3, 12).rotateZ(Math.PI / 2), -2.6, 14.1, 0);                          // ribbed pauldron
-      gp(new THREE.BoxGeometry(2.4, 0.6, 3.0), 2.6, 14.3, 0);                                                          // eagle-wing pauldron
-      for (const ax of [-2.55, 2.55]) gp(new THREE.CylinderGeometry(0.62, 0.55, 4.4, 8), ax, 11.6, 0.2);              // arms
-      gp(new THREE.SphereGeometry(1.35, 14, 10), 0, 15.8, 0);                                                          // helmet
-      gp(new THREE.BoxGeometry(0.35, 0.9, 1.6), 0, 17.3, 0);                                                           // crest
-      neonBox(x0, 15.9, z0 + 1.25, 2.1, 0.42, 0.25, 0xff2020, 2.6);                                                    // red visor
+      // (the statue figure itself is the real hero model, cast in gold: see js/hallstatues.js)
       glow.push({ x: x0, y: 9, z: z0 + 3, c: [1.0, 0.8, 0.45], s: 18, blink: 0, a: 0.12 });
       addBox({ minX: x0 - 3.2, maxX: x0 + 3.2, minZ: z0 - 3.2, maxZ: z0 + 3.2, h: 3.6 });
     }
