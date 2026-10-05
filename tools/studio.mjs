@@ -30,6 +30,7 @@ const cycle = opt('cycle', '');
 const [TW, TH] = opt('tile', '300x420').split('x').map(Number);
 const zoom = +opt('zoom', '1'), focus = +opt('focus', '0.52');
 const url = opt('url', 'http://localhost:8000/');
+const seed = +opt('seed', '0');   // fixed seed for the generic perps/civilians (their looks are otherwise re-rolled every run)
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--mute-audio'] });
 const page = await browser.newPage({ viewport: { width: 640, height: 480 } });
@@ -40,7 +41,7 @@ await page.addInitScript(() => { window.__noRender = true; });
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 
-const res = await page.evaluate(async ({ chars, angles, pose, cycle, TW, TH, zoom, focus }) => {
+const res = await page.evaluate(async ({ chars, angles, pose, cycle, TW, TH, zoom, focus, seed }) => {
   const T = window.__test, THREE = T.THREE, R = T.renderer;
   const studio = new THREE.Scene();
   studio.background = new THREE.Color(0x15121d);
@@ -57,7 +58,7 @@ const res = await page.evaluate(async ({ chars, angles, pose, cycle, TW, TH, zoo
   const cam = new THREE.PerspectiveCamera(30, TW / TH, 0.1, 100); studio.add(cam); rig.removeFromParent(); cam.add(rig);
   const angDeg = { front: 0, q34: 35, q34b: -35, left: 90, right: -90, back: 180, top: 0 };
   const makeChar = (style) => {
-    const ch = new T.Character(style);
+    const ch = new T.Character(style, seed ? { seed } : {});
     if (style === 'dredd') { ch.gunMount.add(T.makeLawgiver()); ch.batonMount.add(T.makeBaton(0.85)); }
     else if (style === 'gunman') { ch.gunMount.rotation.x = Math.PI / 2; ch.gunMount.add(T.makePistol()); }
     else if (style === 'thug' || style === 'brute' || style === 'boss') { ch.toolR.add(T.makeBat(0x6a4a2a, 0.9)); }
@@ -117,7 +118,7 @@ const res = await page.evaluate(async ({ chars, angles, pose, cycle, TW, TH, zoo
     studio.remove(ch.root);
   }
   return { png: sheet.toDataURL('image/png'), info };
-}, { chars, angles, pose, cycle, TW, TH, zoom, focus });
+}, { chars, angles, pose, cycle, TW, TH, zoom, focus, seed });
 fs.writeFileSync(out, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(res.info.join('\n'));
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 6).join('\n') : 'wrote ' + out);

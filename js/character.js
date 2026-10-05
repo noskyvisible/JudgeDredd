@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { deg, lerp, smooth, clamp } from './util.js';
 import { buildBody } from './charmodel.js';
+import { skinCharacter } from './charskin.js';
 export { makeLawgiver, makeBaton, makePistol, makeBat } from './props.js';
 
 // ---------------------------------------------------------------------------
@@ -181,6 +182,7 @@ export class Character {
     this.toolR = new THREE.Group(); this.toolR.position.y = -0.1; this.handR.add(this.toolR);
 
     this.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; } });
+    skinCharacter(this);   // merge the static rig meshes into one SkinnedMesh per material (js/charskin.js): a fraction of the draw calls, identical result
 
     // animation state
     this.phase = 0; this.speed = 0;
