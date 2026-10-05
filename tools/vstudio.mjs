@@ -65,6 +65,7 @@ const res = await page.evaluate(async ({ subject, angles, state: state0, states,
     if (state === 'steerL') { b.speed = 14; c.throttle = 0.4; c.steer = -1; b.steer = -1; }
     if (state === 'steerR') { b.speed = 14; c.throttle = 0.4; c.steer = 1; b.steer = 1; }
     if (state === 'park') { c.hold = true; }
+    if (subject === 'bike') { b.mounted = state !== 'park'; G.mounted = b.mounted ? b : null; }   // riderless 'park' = on the side stand
     if (state === 'siren') { b.speed = 20; c.throttle = 0.5; }
     b.accelLean = c.throttle - c.brake;
   };

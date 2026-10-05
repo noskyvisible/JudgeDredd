@@ -43,6 +43,7 @@ export const SHOTS = {
   ride_fast:   { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.16, dist: 7.5 }, settle: 150, setup: 'ride_w' },
   flyers:      { at: [468, -575, 0], free: { pos: [446, 1.7, -560], look: [450, 24, -470], fov: 64 }, settle: 120, setup: 'flyers' },
   boost_close: { at: [-300, 50, Math.PI / 2], free: { rel: true, pos: [-2.6, 1.3, -4.2], look: [0, 0.8, -1.2], fov: 58 }, settle: 100, setup: 'boost' },
+  bike_park:   { at: [450.2, -498, 0], free: { pos: [455.6, 1.5, -495.4], look: [451.6, 0.85, -498.2], fov: 46 }, settle: 90, setup: 'park' },
 };
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--mute-audio'] });
@@ -78,6 +79,7 @@ for (const name of names) {
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     if (sh.setup === 'ride_stop') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 0; T.bike.sirenOn = true; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
     if (sh.setup === 'ride_w') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); }
+    if (sh.setup === 'park') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); T.bike.speed = 0; T.bike.sirenOn = false; T.bike.called = false; T.bike.ctrl.hold = true; P.pos.set(T.bike.pos.x - 1.3, 0, T.bike.pos.z + 2.4); P.yaw = 2.6; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
     if (sh.setup === 'boost') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 70; T.bike.boostE = 1; }
     if (sh.setup === 'flyers') {   // js/flyers.js is not wired into main.js; instantiate it here for the still
       if (!window.__flyers) { const F = await import('/js/flyers.js'); window.__flyers = F.createFlyers(G.scene, { count: 32 }); }

@@ -37,6 +37,11 @@ const WB = AXLE_F.z - AXLE_R.z;
 const Z0 = 0.58, Z1 = 1.86;                // fairing extent (rear edge hugs the tank)
 const TZ0 = -2.08, TZ1 = -0.86;            // tail cowl extent
 const LAMP = V3(0, 1.245, Z1 - 0.045);     // main headlamp centre
+const PARK_ROLL = -0.1;                     // parked: settles this far onto the side stand (toward +X, the left)
+const STAND_PIVOT = V3(0.24, 0.42, -0.3), STAND_FOOT = V3(0.48, 0.048, -0.42);   // foot touches the ground once rolled
+const STAND_LEN = STAND_PIVOT.distanceTo(STAND_FOOT);
+const Q_STAND_DOWN = new THREE.Quaternion().setFromUnitVectors(V3(0, -1, 0), STAND_FOOT.clone().sub(STAND_PIVOT).normalize());
+const Q_STAND_UP = new THREE.Quaternion().setFromUnitVectors(V3(0, -1, 0), V3(0.03, 0.06, -1).normalize());
 
 // bike space -> front (steering) local space at zero steer
 const toFront = (x, y, z) => { const dy = y - HEAD.y, dz = z - HEAD.z, c = Math.cos(RAKE), s = Math.sin(RAKE); return V3(x, dy * c - dz * s, dy * s + dz * c); };
@@ -577,6 +582,21 @@ export function makeLawmasterModel(pal = {}) {
     shocks.push({ grp, top, spr, a: V3(s * 0.25, 0.64, -0.96), b: V3(s * 0.22, 1.10, -0.80) });
   }
 
+  // ---------------- side stand (swings down when parked) ----------------
+  const stand = new THREE.Group(); stand.position.copy(STAND_PIVOT); inner.add(stand);
+  {
+    // forged leg tapering to the foot; the foot pad is built flat to the road in the deployed pose
+    const toLocal = new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), PARK_ROLL).multiply(Q_STAND_DOWN).invert();
+    const up = V3(0, 1, 0).applyQuaternion(toLocal), out = V3(1, 0, 0).applyQuaternion(Q_STAND_DOWN.clone().invert());
+    const foot = V3(0, -STAND_LEN, 0);
+    kit.add(rod(V3(0, 0, 0), V3(0, -STAND_LEN + 0.02, 0), 0.026, 10, 0.017), mats.chrome, stand);
+    const pad = new THREE.CylinderGeometry(0.044, 0.05, 0.018, 14);
+    pad.applyMatrix4(new THREE.Matrix4().compose(foot.clone().addScaledVector(up, 0.009), new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), up), V3(1, 1, 1)));
+    kit.add(pad, mats.gun, stand);
+    kit.add(rod(V3(0, -0.07, 0), V3(0, -0.06, 0).addScaledVector(out, 0.075), 0.011, 6, 0.008), mats.chrome, stand);   // kick tab
+    kit.add(xf(new THREE.CylinderGeometry(0.03, 0.03, 0.055, 12), 0, 0, 0, 0, 0, Math.PI / 2), mats.gun, stand);         // pivot boss
+  }
+
   // ---------------- pegs + foot controls ----------------
   const pegs = [V3(0.50, 0.66, -0.12), V3(-0.50, 0.66, -0.12)];
   for (const p of pegs) {
@@ -634,14 +654,14 @@ export function makeLawmasterModel(pal = {}) {
     rear, front, rearSpin, frontSpin, wr: rearSpin, wf: frontSpin, spot, siren,
     sirenL: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenL), sirenR: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenR),   // bike.js flashes .material.color
     exhaust: [V3(-0.41, 0.53, -2.1), V3(0.41, 0.53, -2.1)],
-    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow, trails, tailY, roadPool, streaks,
+    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow, trails, tailY, roadPool, streaks, stand,
     anchors: {
       seat: V3(0, 1.19, -0.58),
       pegL: pegs[0].clone(), pegR: pegs[1].clone(),
       gripL: gripIn[1].clone().lerp(gripOut[1], 0.5), gripR: gripIn[0].clone().lerp(gripOut[0], 0.5),   // in `front` space
       gripAxisL: gripOut[1].clone().sub(gripIn[1]).normalize(), gripAxisR: gripOut[0].clone().sub(gripIn[0]).normalize(),
     },
-    vis: { cf: 0, cr: 0, vf: 0, vr: 0, prevSpeed: 0, acc: 0, spinF: 0, spinR: 0, brakeK: 0, boostK: 0, surge: 0, vsurge: 0, t: Math.random() * 10, dist: 0, heat: 0, glowBase: new THREE.Color(P.glow) },
+    vis: { park: 0, cf: 0, cr: 0, vf: 0, vr: 0, prevSpeed: 0, acc: 0, spinF: 0, spinR: 0, brakeK: 0, boostK: 0, surge: 0, vsurge: 0, t: Math.random() * 10, dist: 0, heat: 0, glowBase: new THREE.Color(P.glow) },
   };
   updateLawmasterVisuals({ model: g, speed: 0, steer: 0, ctrl: { throttle: 0, brake: 0, hold: true }, lean: 0 }, 0);
   // despawned perp bikes are simply removed from the scene: free this instance's GPU buffers then
@@ -712,6 +732,12 @@ export function updateLawmasterVisuals(bike, dt) {
     s.grp.position.copy(_w); s.grp.quaternion.setFromUnitVectors(UPV, d);
     s.top.position.y = len; s.spr.position.y = 0.055; s.spr.scale.y = Math.max(0.05, len - 0.165 - 0.055);
   }
+  // ---- parked on the side stand: stand swings down, bike settles onto it (visual roll about the ground line) ----
+  const parked = live && !bike.perp && !bike.mounted && !bike.called && asp < 0.6 && G.mounted !== bike;
+  V.park = dt > 0 ? damp(V.park, parked ? 1 : 0, parked ? 3.2 : 9, dt) : (parked ? 1 : 0);
+  const kp = smoothstep(0, 1, V.park);
+  if (u.stand) u.stand.quaternion.slerpQuaternions(Q_STAND_UP, Q_STAND_DOWN, smoothstep(0, 0.6, V.park));
+  u.roll.rotation.z = PARK_ROLL * smoothstep(0.35, 1, kp);
   // ---- steering geometry: full lock at walking pace, a few degrees at speed ----
   u.front.rotation.y = -(bike.steer || 0) * mix(0.42, 0.07, smoothstep(4, 45, asp));
   // ---- wheels: spin + blur ----
