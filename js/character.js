@@ -39,7 +39,7 @@ function measureRig(ch) {
   }
   if (any) { minY = box.min.y; minZ = box.min.z; maxZ = box.max.z; }
   const footH = clamp(-minY, 0.04, 0.13);
-  return { hipX, hipY, thigh, shin, footH, heel: clamp(-minZ - 0.02, 0.04, 0.2), ball: clamp(maxZ - 0.085, 0.08, 0.26), toe: clamp(maxZ, 0.1, 0.4), legLen: thigh + shin + footH };
+  return { hipX, hipY, thigh, shin, footH, heel: clamp(-minZ - 0.006, 0.04, 0.22), ball: clamp(maxZ - 0.012, 0.08, 0.36), toe: clamp(maxZ, 0.1, 0.4), legLen: thigh + shin + footH };
 }
 
 // secondary-motion springs: index -> [omega, zeta, limit]
@@ -165,7 +165,9 @@ export class Character {
     this.neck.rotation.set(cur.head[0] * 0.4, hy * 0.4, cur.head[2] * 0.4);
     this.head.rotation.set(cur.head[0] * 0.6, hy * 0.6, cur.head[2] * 0.6);
     this.wrL.rotation.set(cur.wrL[0], cur.wrL[1], cur.wrL[2]); this.wrR.rotation.set(cur.wrR[0], cur.wrR[1], cur.wrR[2]);
-    this.anL.rotation.set(cur.anL[0], cur.anL[1], cur.anL[2]); this.anR.rotation.set(cur.anR[0], cur.anR[1], cur.anR[2]);
+    // ankles stay inside a sane range whatever the blend of IK, clips and transitions produced
+    this.anL.rotation.set(clamp(cur.anL[0], -0.82, 1.32), clamp(cur.anL[1], -0.5, 0.5), clamp(cur.anL[2], -0.5, 0.5));
+    this.anR.rotation.set(clamp(cur.anR[0], -0.82, 1.32), clamp(cur.anR[1], -0.5, 0.5), clamp(cur.anR[2], -0.5, 0.5));
     this.shL.rotation.set(cur.shL[0], cur.shL[1], cur.shL[2]); this.shR.rotation.set(cur.shR[0], cur.shR[1], cur.shR[2]);
     // elbows and knees only ever flex (never hyperextend)
     this.elL.rotation.set(clamp(cur.elL[0], -2.7, 0), 0, 0); this.elR.rotation.set(clamp(cur.elR[0], -2.7, 0), 0, 0);
@@ -178,9 +180,15 @@ export class Character {
     const c = pickClip(name, dir, this); if (!c) return;
     this.clip = c; this.clipName = name; this.clipT = 0; this.clipSpeed = speed > 0 ? speed : 1; this.hitFired = false; this.clipHold = !!c.hold;
     this.clipW = 0; this.clipDone = false; this._linger = null; this._fid = null; this._impact = false;
-    // clip foot targets are offsets from where the feet are now (unless the clip places them absolutely)
-    const F = this._fo, ft = this.gait.feet;
-    for (let i = 0; i < 2; i++) { F[i * 3] = ft[i].x; F[i * 3 + 1] = ft[i].z; F[i * 3 + 2] = ft[i].yaw; }
+    // clip foot targets are offsets from where the feet are now (unless the clip places them absolutely); out of a run the feet
+    // can be anywhere mid-stride, so start from the stance spot plus a clamped share of the current offset from it
+    const F = this._fo, g = this.gait, ft = g.feet;
+    for (let i = 0; i < 2; i++) {
+      const n = g.neutral(ft[i], 0, 0);
+      let dx = (ft[i].x - n.x) * 0.5, dz = (ft[i].z - n.z) * 0.5; const l = Math.hypot(dx, dz);
+      if (l > 0.14) { dx *= 0.14 / l; dz *= 0.14 / l; }
+      F[i * 3] = n.x + dx; F[i * 3 + 1] = n.z + dz; F[i * 3 + 2] = n.yaw + clamp(wrapPi(ft[i].yaw - n.yaw), -0.3, 0.3) * 0.5;
+    }
     this._transition(c.blend);
   }
   stopClip() {
@@ -482,7 +490,7 @@ export class Character {
       m3EulerYXZ(_mF, buf[fto], buf[fto + 1], buf[fto + 2]);
       m3TMul(_mA, _mK, _mF);
       eulerXYZ(_mA, buf, ao);
-      buf[ao] = clamp(buf[ao], -0.7, 0.95); buf[ao + 1] = clamp(buf[ao + 1], -0.45, 0.45); buf[ao + 2] = clamp(buf[ao + 2], -0.32, 0.32);
+      buf[ao] = clamp(buf[ao], -0.8, 0.95); buf[ao + 1] = clamp(buf[ao + 1], -0.45, 0.45); buf[ao + 2] = clamp(buf[ao + 2], -0.32, 0.32);
       if (C && C.legFK[s] && w > 0) {
         const cb = this._cb, m = C.mask;
         for (let c = 0; c < 3; c++) {

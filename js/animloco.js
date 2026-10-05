@@ -29,7 +29,7 @@ const smooth01 = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
 // dimensionless stride frequency vs dimensionless speed (v / sqrt(g·leg)); fitted to human walking /
 // running data and nudged up at speed because these rigs have short legs for their height
 const FH_V = [0, 0.3, 0.5, 0.7, 1.0, 1.5, 2.2, 3.2, 4.5];
-const FH_F = [0.215, 0.24, 0.29, 0.335, 0.4, 0.455, 0.53, 0.6, 0.64];
+const FH_F = [0.235, 0.265, 0.318, 0.36, 0.415, 0.46, 0.53, 0.6, 0.64];
 function interp(xs, ys, x) {
   if (x <= xs[0]) return ys[0];
   for (let i = 1; i < xs.length; i++) if (x < xs[i]) return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - xs[i - 1]) / (xs[i] - xs[i - 1]);
@@ -41,11 +41,11 @@ function interp(xs, ys, x) {
 // spine bias, swagger: shoulder roll, twitch: erratic noise (junkies), toe: toe-out angle (rad).
 export const PERSONA = {
   default: { cad: 1, width: 1, lift: 1, bob: 1, sway: 1, arm: 1, heavy: 0.2, hunch: 0.02, swagger: 0, twitch: 0, toe: 0.12, armOut: 0, shift: 7 },
-  dredd: { cad: 0.92, width: 1.12, lift: 1.05, bob: 1.1, sway: 0.75, arm: 0.6, heavy: 1, hunch: 0.05, swagger: 0.15, twitch: 0, toe: 0.17, armOut: 0.05, shift: 9 },
+  dredd: { cad: 0.96, width: 1.12, lift: 1.05, bob: 1.1, sway: 0.75, arm: 0.6, heavy: 1, hunch: 0.05, swagger: 0.15, twitch: 0, toe: 0.17, armOut: 0.05, shift: 9 },
   thug: { cad: 0.98, width: 1.08, lift: 1, bob: 1.05, sway: 1.15, arm: 1.15, heavy: 0.35, hunch: 0.07, swagger: 1, twitch: 0, toe: 0.16, armOut: 0.04, shift: 6 },
   gunman: { cad: 1.02, width: 1, lift: 0.95, bob: 0.9, sway: 0.9, arm: 0.85, heavy: 0.2, hunch: 0.06, swagger: 0.2, twitch: 0, toe: 0.12, armOut: 0.02, shift: 7 },
-  brute: { cad: 0.88, width: 1.3, lift: 0.9, bob: 1.15, sway: 1.25, arm: 0.95, heavy: 1, hunch: 0.09, swagger: 0.6, twitch: 0, toe: 0.2, armOut: 0.16, shift: 9 },
-  boss: { cad: 0.86, width: 1.3, lift: 0.9, bob: 1.1, sway: 1.15, arm: 0.85, heavy: 1, hunch: 0.06, swagger: 0.5, twitch: 0, toe: 0.2, armOut: 0.18, shift: 10 },
+  brute: { cad: 0.92, width: 1.3, lift: 0.9, bob: 1.15, sway: 1.25, arm: 0.95, heavy: 1, hunch: 0.09, swagger: 0.6, twitch: 0, toe: 0.2, armOut: 0.16, shift: 9 },
+  boss: { cad: 0.9, width: 1.3, lift: 0.9, bob: 1.1, sway: 1.15, arm: 0.85, heavy: 1, hunch: 0.06, swagger: 0.5, twitch: 0, toe: 0.2, armOut: 0.18, shift: 10 },
   junkie: { cad: 1.12, width: 0.9, lift: 1.1, bob: 1.2, sway: 1.3, arm: 1.3, heavy: 0, hunch: 0.16, swagger: 0, twitch: 1, toe: 0.08, armOut: 0.02, shift: 4 },
   biker: { cad: 0.98, width: 1.08, lift: 1, bob: 1, sway: 1.05, arm: 1.05, heavy: 0.3, hunch: 0.05, swagger: 0.7, twitch: 0, toe: 0.15, armOut: 0.04, shift: 7 },
   civ: { cad: 1.02, width: 0.95, lift: 0.95, bob: 0.9, sway: 1, arm: 0.95, heavy: 0.1, hunch: 0.02, swagger: 0, twitch: 0, toe: 0.1, armOut: 0, shift: 7 },
@@ -53,13 +53,14 @@ export const PERSONA = {
 
 // Standing stances: neutral foot spots (rig units, root frame) the idle stepper steers the feet to.
 // w: half stance width, zl/zr: fore-aft of left/right foot, yl/yr: extra foot yaw, drop: pelvis drop, turn: pelvis yaw.
+// knee: flex (deg) of the straighter leg that sets the standing pelvis height (soft knees, never locked, never squatting).
 export const STANCE = {
-  relaxed: { w: 0.15, zl: 0.03, zr: -0.03, yl: 0, yr: 0, drop: 0.012, turn: 0 },
-  dredd: { w: 0.185, zl: 0.07, zr: -0.05, yl: -0.04, yr: -0.12, drop: 0.025, turn: -0.06 },
-  ready: { w: 0.2, zl: 0.15, zr: -0.13, yl: -0.12, yr: -0.42, drop: 0.075, turn: -0.3 },
-  aim: { w: 0.19, zl: 0.12, zr: -0.1, yl: -0.1, yr: -0.38, drop: 0.035, turn: -0.22 },
-  wide: { w: 0.22, zl: 0.05, zr: -0.04, yl: 0, yr: -0.06, drop: 0.03, turn: 0 },
-  cower: { w: 0.13, zl: 0, zr: 0, yl: 0.1, yr: -0.1, drop: 0.02, turn: 0 },
+  relaxed: { w: 0.15, zl: 0.03, zr: -0.03, yl: 0, yr: 0, knee: 9, turn: 0 },
+  dredd: { w: 0.185, zl: 0.07, zr: -0.05, yl: -0.04, yr: -0.12, knee: 13, turn: -0.06 },
+  ready: { w: 0.2, zl: 0.15, zr: -0.13, yl: -0.12, yr: -0.42, knee: 34, turn: -0.3 },
+  aim: { w: 0.19, zl: 0.12, zr: -0.1, yl: -0.1, yr: -0.38, knee: 18, turn: -0.22 },
+  wide: { w: 0.22, zl: 0.05, zr: -0.04, yl: 0, yr: -0.06, knee: 13, turn: 0 },
+  cower: { w: 0.13, zl: 0, zr: 0, yl: 0.1, yr: -0.1, knee: 14, turn: 0 },
 };
 
 class Foot {
@@ -323,7 +324,7 @@ export class Gait {
     const st = this.stance, ph = this.phase, iw = 1 - mw;
     const sp01 = clamp(this.spd / 1.2, 0, 1);
     this.stanceK += ((opts.ready ? 1 : 0) - this.stanceK) * (1 - Math.exp(-4 * dt));
-    let hy = 1.0 - lerp(st.drop, lerp(0.018, 0.034, runW) * (1 + 0.3 * P.heavy) + 0.012 * sprintW, mw);
+    let hy = 1.0 - (lerp(0.018, 0.034, runW) * (1 + 0.3 * P.heavy) + 0.012 * sprintW);
     const c2 = Math.cos(TAU * 2 * (ph - D * 0.5));
     // walking vaults over the stance leg (high at mid-stance); running dips through the stance and flies ballistically between
     const u = frac(ph * 2), s2 = Math.min(0.95, 2 * D);
@@ -333,7 +334,6 @@ export class Gait {
     if (P.heavy > 0) { const dip = u < 0.18 ? Math.sin(Math.PI * u / 0.18) : 0; hy -= dip * 0.018 * P.heavy * mw * (1 - runW); }
     const ws = wobble(this.t * 6.28 / P.shift, this.seed);           // slow idle weight shift (-1..1)
     const breath = Math.sin(this.t * 1.55 + this.seed);
-    hy += iw * (0.0035 * breath - 0.01 * Math.abs(ws) * (1 - this.stanceK));
     let px = lerp(0.032, 0.009, runW) * P.sway * mw * Math.cos(TAU * (ph - D * 0.5)) + iw * ws * 0.032 * P.sway * (1 - 0.6 * this.stanceK);
     let pz = 0;
     let yaw = -lerp(5, 9, runW) * DEG * Math.cos(TAU * ph) * mw * sp01 + this.gyaw * 0.85 * mw + st.turn * iw;
@@ -345,11 +345,14 @@ export class Gait {
     this.accR += (clamp(this.ax / 9.81, -0.45, 0.45) * mw - this.accR) * (1 - Math.exp(-7 * dt));
     roll += -this.lean * 0.55 - this.accR * 0.25;
     let pitch = (lerp(2, 7, runW) * DEG + 4 * DEG * sprintW) * mw + this.accP * 0.22 + iw * 0.01;
-    // reach clamp: the pelvis may not rise higher than the planted legs can reach
-    const R = (g.thigh + g.shin) * 0.985;
+    // reach clamp: the pelvis may not rise higher than the planted legs can reach (at ~10 deg of knee: near full extension the
+    // knee angle is very sensitive, 98.5% of the leg's length is already 20 deg).  Standing, the pelvis sits as high as lets the
+    // straighter leg keep the stance's soft knee, plus breathing and the weight shift.
+    const a2 = g.thigh * g.thigh + g.shin * g.shin, ab2 = 2 * g.thigh * g.shin;
+    const R = Math.sqrt(a2 + ab2 * Math.cos(7 * DEG)), Rk = Math.sqrt(a2 + ab2 * Math.cos((st.knee ?? 10) * DEG));
     m3EulerXYZ(_M, pitch, yaw, roll);
-    let hmax = 9;
-    const want = hy;
+    let hmax = 9, hk = 9;
+    const want0 = hy;
     for (const f of feet) {
       f.over = false;
       if (!f.planted && f.s < 0.92) continue;
@@ -359,9 +362,13 @@ export class Gait {
       const ay = g.footH + f.ay;
       const m = dxz2 < R * R ? ay + Math.sqrt(R * R - dxz2) - hjyOff : ay - hjyOff;
       if (m < hmax) hmax = m;
-      if (f.planted && m < want - 0.1) f.over = true;
+      const mk = dxz2 < Rk * Rk ? ay + Math.sqrt(Rk * Rk - dxz2) - hjyOff : ay - hjyOff;
+      if (mk < hk) hk = mk;
+      if (f.planted && m < want0 - 0.1) f.over = true;
     }
-    const kk = 0.03;
+    if (hk < 9) hy = lerp(hk + 0.0025 * breath - 0.003 * Math.abs(ws) * (1 - this.stanceK), hy, mw);
+    const want = hy;
+    const kk = lerp(0.002, 0.018, mw);   // soft zone below the limit: tiny standing (knees stay where the stance puts them), smoother moving
     if (hy > hmax - kk) hy = hmax - kk * Math.exp(-(hy - (hmax - kk)) / kk);
     if (hy < want - 0.14) hy = want - 0.14;   // never squat into a split to keep a far foot planted (it steps instead)
     this.hy = hy;

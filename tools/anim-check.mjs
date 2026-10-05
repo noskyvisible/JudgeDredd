@@ -2,7 +2,7 @@
 //   * foot slide: characters locomote at constant speed with the root really moving (set after update(), like the game);
 //     the world position of the planted contact point (heel while heel-rocking / flat, ball while flat / toe-rocking)
 //     must not drift during stance
-//   * sole penetration of planted feet
+//   * sole contact of planted feet and standing stances, measured on the model's real boot vertices (no sinking / floating)
 //   * no knee / elbow hyperextension, sane ankles, no NaN — across every clip (and directional variant) at several speeds,
 //     with impulses and look-at targets thrown in
 //   * lying poses end on the floor (core points not under it)
@@ -39,6 +39,16 @@ const res = await page.evaluate(({ quick }) => {
   };
   const v3 = new THREE.Vector3();
   const dt = 1 / 60;
+  // real sole contact: lowest boot vertex (world y) of an ankle, from the model's actual geometry (not the IK's foot model)
+  const bootVerts = (ch, an) => {
+    if (an._bv) return an._bv;
+    ch.root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(an.matrixWorld).invert(), rel = new THREE.Matrix4(), pts = [];
+    an.traverse((o) => { if (!o.isMesh || !o.geometry) return; rel.multiplyMatrices(inv, o.matrixWorld); const pa = o.geometry.attributes.position;
+      for (let i = 0; i < pa.count; i += 2) pts.push(new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(rel)); });
+    return (an._bv = pts);
+  };
+  const soleY = (ch, an) => { const pts = bootVerts(ch, an), M = an.matrixWorld; let m = 1e9; for (const q of pts) { const y = M.elements[1] * q.x + M.elements[5] * q.y + M.elements[9] * q.z + M.elements[13]; if (y < m) m = y; } return m; };
 
   // ---------------------------------------------------------------- foot slide
   const styles = quick ? ['dredd', 'thug'] : ['dredd', 'thug', 'civ', 'brute', 'junkie', 'boss', 'gunman'];
@@ -51,7 +61,7 @@ const res = await page.evaluate(({ quick }) => {
     const vx = (d[0] * Math.cos(yaw) + d[1] * Math.sin(yaw)) * v, vz = (-d[0] * Math.sin(yaw) + d[1] * Math.cos(yaw)) * v;
     ch.root.rotation.y = yaw;
     const st = [{}, {}];
-    let maxD = 0, sum = 0, n = 0, sink = 0;
+    let maxD = 0, sum = 0, n = 0, sink = 0, flt = -1;
     for (let f = 0; f < 60 * 6; f++) {
       ch.speed = v; ch.update(dt);
       pos.x += vx * dt; pos.z += vz * dt; ch.root.position.copy(pos);
@@ -64,13 +74,25 @@ const res = await page.evaluate(({ quick }) => {
         if (s.skip-- > 0) continue;
         const heel = an.localToWorld(v3.set(0, -geo.footH, -geo.heel)).clone();
         const ball = an.localToWorld(v3.set(0, -geo.footH, geo.ball)).clone();
-        sink = Math.min(sink, heel.y, ball.y);
+        if (f % 2 === 0) { const sy = soleY(ch, an); sink = Math.min(sink, sy); flt = Math.max(flt, sy); }
         if (ft.pitch <= 0.02) { if (!s.heel) s.heel = heel; else s.d = Math.max(s.d, Math.hypot(heel.x - s.heel.x, heel.z - s.heel.z)); } else s.heel = null;
         if (ft.pitch >= -0.02) { if (!s.ball) s.ball = ball; else s.d = Math.max(s.d, Math.hypot(ball.x - s.ball.x, ball.z - s.ball.z)); } else s.ball = null;
       }
     }
-    const r = { style, v, dir: d.join(','), maxCm: +(maxD * 100).toFixed(2), meanCm: n ? +(sum / n * 100).toFixed(2) : 0, stances: n, sinkCm: +(sink * 100).toFixed(1), period: +ch.cyclePeriod().toFixed(3) };
-    out.slide.push(r); out.worstSlide = Math.max(out.worstSlide, r.maxCm); out.sink = Math.min(out.sink, r.sinkCm);
+    const r = { style, v, dir: d.join(','), maxCm: +(maxD * 100).toFixed(2), meanCm: n ? +(sum / n * 100).toFixed(2) : 0, stances: n, sinkCm: +(sink * 100).toFixed(1), floatCm: +(flt * 100).toFixed(1), period: +ch.cyclePeriod().toFixed(3) };
+    out.slide.push(r); out.worstSlide = Math.max(out.worstSlide, r.maxCm); out.sink = Math.min(out.sink, r.sinkCm); out.float = Math.max(out.float ?? -1, r.floatCm);
+  }
+
+  // ---------------------------------------------------------------- standing sole contact (idle / combat guard / aim)
+  out.soles = [];
+  for (const style of quick ? ['dredd', 'thug'] : ['dredd', 'thug', 'gunman', 'brute', 'junkie', 'boss', 'civ', 'biker']) {
+    const ch = mk(style), row = { style };
+    for (const [tag, setup] of [['idle', () => {}], ['ready', () => { ch.stance = 'ready'; }], ['aim', () => { ch.stance = null; ch.aim = 1; }]]) {
+      setup(); let lo = 1e9, hi = -1e9;
+      for (let f = 0; f < 240; f++) { ch.update(dt); if (f > 120 && f % 10 === 0) { ch.root.updateMatrixWorld(true); for (const an of [ch.anL, ch.anR]) { const y = soleY(ch, an); lo = Math.min(lo, y); hi = Math.max(hi, y); } } }
+      row[tag] = [+(lo * 100).toFixed(2), +(hi * 100).toFixed(2)];
+    }
+    out.soles.push(row);
   }
 
   // ---------------------------------------------------------------- clips: limits + NaN
@@ -144,8 +166,10 @@ const res = await page.evaluate(({ quick }) => {
 
 const bad = res.slide.filter((r) => r.maxCm >= 3);
 console.log('FOOT SLIDE (max cm per stance; contact point drift in world space)');
-for (const r of res.slide) console.log(`  ${r.style.padEnd(7)} v=${String(r.v).padEnd(4)} dir=${r.dir.padEnd(8)} max ${String(r.maxCm).padStart(5)}  mean ${String(r.meanCm).padStart(5)}  stances ${String(r.stances).padStart(2)}  sink ${String(r.sinkCm).padStart(5)}  period ${r.period}`);
-console.log(`worst slide ${res.worstSlide} cm, ${bad.length} runs >= 3 cm; deepest sole ${res.sink} cm`);
+for (const r of res.slide) console.log(`  ${r.style.padEnd(7)} v=${String(r.v).padEnd(4)} dir=${r.dir.padEnd(8)} max ${String(r.maxCm).padStart(5)}  mean ${String(r.meanCm).padStart(5)}  stances ${String(r.stances).padStart(2)}  sole ${String(r.sinkCm).padStart(5)}..${String(r.floatCm).padStart(4)}  period ${r.period}`);
+console.log(`worst slide ${res.worstSlide} cm, ${bad.length} runs >= 3 cm; planted soles (real boot geometry) between ${res.sink} and ${res.float} cm`);
+console.log('STANDING SOLES (lowest boot vertex, cm: min..max over both feet)');
+for (const r of res.soles) console.log(`  ${r.style.padEnd(7)} idle ${r.idle.join('..').padEnd(12)} ready ${r.ready.join('..').padEnd(12)} aim ${r.aim.join('..')}`);
 console.log(`clip runs ${res.clipRuns}, problems: ${res.problems.length}`);
 for (const p of res.problems.slice(0, 30)) console.log('  ' + p);
 console.log('LYING POSES (heights in rig units)');
