@@ -244,13 +244,13 @@ export function eaglePauldron(M, sx) {
     const oa = Math.PI / 2, prof = [[0.5, 0], [0.25, 0.42], [0, 0.5], [-0.25, 0.42], [-0.5, 0], [-0.25, -0.28], [0.25, -0.28]];
     const widthAt = (t) => (t < 0.35 ? 0.62 + 0.38 * Math.sin((t / 0.35) * Math.PI / 2) : Math.sqrt(Math.max(0, 1 - Math.pow((t - 0.35) / 0.65, 2.2))));
     // rows (top to bottom drawn last-to-first so upper rows overlap lower ones):
-    // [y root, count, a-span from the outer meridian (rad), length, width, thickness, lift, tilt, material]
+    // [y root, count, a-span from the outer meridian (rad), length, width, thickness, lift, tilt, tip flare, material]
     const rows = [
-      [0.025, 11, 2.25, 0.25, 0.052, 0.011, 0.016, 0.34, M.gold],
-      [0.09, 10, 2.0, 0.18, 0.05, 0.01, 0.031, 0.27, M.goldDark],
-      [0.14, 8, 1.75, 0.12, 0.046, 0.009, 0.045, 0.2, M.gold],
+      [0.025, 11, 2.25, 0.27, 0.052, 0.011, 0.016, 0.34, 0.05, M.gold],
+      [0.09, 10, 2.0, 0.18, 0.05, 0.01, 0.031, 0.27, 0.018, M.goldDark],
+      [0.14, 8, 1.75, 0.12, 0.046, 0.009, 0.045, 0.2, 0.012, M.gold],
     ];
-    for (const [yr, n, span, L, wd, tk, lift, tilt, mat] of rows) {
+    for (const [yr, n, span, L, wd, tk, lift, tilt, flare, mat] of rows) {
       const parts = [];
       for (let i = 0; i < n; i++) {
         const t = i / (n - 1), off = (t - 0.5) * 2 * span, a0 = oa + off, th = Math.sign(off) * tilt * Math.pow(Math.abs(off) / span, 0.8);
@@ -260,7 +260,7 @@ export function eaglePauldron(M, sx) {
         const c = Math.cos(th), s = Math.sin(th), hh = lift + (i % 2) * 0.0035;
         parts.push(deform(g, (v) => {
           const X = v.x * c - v.y * s, Y = v.x * s + v.y * c, k = Y / len;
-          v.copy(S.at(a0 - X / Ra, yr - Y, hh + v.z + 0.004 + 0.012 * k * k));   // x -> -a keeps the winding outward
+          v.copy(S.at(a0 - X / Ra, yr - Y, hh + v.z + 0.004 + flare * k * k * k));   // x -> -a keeps the winding outward; tips flare off the dome
         }, { smooth: false }));
       }
       P(mergeGeos(parts), mat);

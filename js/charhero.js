@@ -3,7 +3,7 @@ import { patchRim } from './shaders.js';
 import { eagleShape } from './world.js';
 import { heroTextures, ATLAS, atlasUV } from './charhero_tex.js';
 import {
-  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX, bakeHero, proxyOcclusion,
+  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX, bakeHero, proxyOcclusion, stitchGeo,
   rrect, ellipse, roundPoly, sstep, gauss, lin, wrapA, TAU, V,
 } from './charhero_geo.js';
 import { buildHelmet, buildFace, fistGeos, ribbedPauldron, eaglePauldron, bootFootGeos, smoothBox } from './charhero_parts.js';
@@ -126,6 +126,7 @@ export function buildHero(ch, st) {
   put(hips, loftGeo(pelvis, { ys: lin(-0.215, 0.15, 14), na: 44, cap0: 0.01 }), M.suit);
   put(hips, bandGeo(pelvis, -0.045, 0.085, { t: 0.03, r: 0.012, na: 64 }), M.green);
   for (const y of [-0.035, 0.075]) put(hips, bandGeo(pelvis, y - 0.0035, y + 0.0035, { t: 0.003, h0: 0.03, r: 0.0014, na: 48, nc: 1 }), M.greenDark);
+  for (const y of [-0.026, 0.066]) put(hips, stitchGeo(pelvis, lin(0, TAU, 97).map((a) => [a, y]), { h: 0.0306, spacing: 0.012 }), M.greenDark);
   // eagle-shield buckle
   put(hips, plateGeo(pelvis, rrect(0.19, 0.145, 0.024), { center: [0, 0.02], t: 0.018, h0: 0.03, bevel: 0.007, crown: 0.004 }), M.gold);
   put(hips, atlasUV(plateGeo(pelvis, rrect(0.15, 0.112, 0.014), { center: [0, 0.02], t: 0.003, h0: 0.05, bevel: 0.0012, uv: 'box', n: 40, nI: 2 }), ATLAS.buckle), M.decal);
@@ -259,6 +260,8 @@ export function buildHero(ch, st) {
     put(el, loftGeo(gS, { ys: lin(-0.4, -0.068, 10), na: 32 }), M.green);
     put(el, loftGeo(gS, { ys: lin(-0.15, -0.068, 3), na: 32, h: -0.007, flip: true }), M.greenDark);
     put(el, rimGeo(gS, lin(0, TAU, 33).slice(0, 32).map((a) => [a, -0.071]), 0.009, -0.0035, { closed: true, seg: 6 }), M.greenDark);
+    put(el, stitchGeo(gS, lin(0, TAU, 49).map((a) => [a, -0.088]), { spacing: 0.011 }), M.greenDark);
+    put(el, stitchGeo(gS, lin(0, TAU, 49).map((a) => [a, -0.375]), { spacing: 0.011 }), M.greenDark);
     for (const y of [-0.31, -0.2]) {
       put(el, bandGeo(gS, y, y + 0.026, { t: 0.0075, r: 0.003, na: 24, nc: 2 }), M.greenDark);
       put(el, plateGeo(gS, rrect(0.034, 0.034, 0.006, 2), { center: [sx * Math.PI / 2, y + 0.013], t: 0.006, h0: 0.0075, bevel: 0.002, n: 24, nI: 2 }), M.gold);
@@ -324,6 +327,7 @@ export function buildHero(ch, st) {
     put(kn, loftGeo(bS, { ys: lin(-0.45, -0.038, 13), na: 40 }), M.green);
     put(kn, loftGeo(bS, { ys: lin(-0.11, -0.038, 3), na: 40, h: -0.008, flip: true }), M.greenDark);
     put(kn, rimGeo(bS, lin(0, TAU, 37).slice(0, 36).map((a) => [a, -0.041]), 0.009, -0.003, { closed: true, seg: 6 }), M.greenDark);
+    put(kn, stitchGeo(bS, lin(0, TAU, 49).map((a) => [a, -0.058]), { spacing: 0.011 }), M.greenDark);
     put(kn, plateAY(bS, [[-0.6, -0.37], [0.6, -0.37], [0.62, -0.09], [-0.62, -0.09]], { round: 0.03, t: 0.008, h0: 0.0, bevel: 0.004, crown: 0.004, nI: 3 }), M.green);   // shin guard
     for (const y of [-0.31, -0.2]) {
       put(kn, bandGeo(bS, y, y + 0.026, { t: 0.0075, r: 0.003, na: 28, nc: 2 }), M.greenDark);

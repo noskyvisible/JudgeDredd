@@ -646,3 +646,32 @@ export function proxyOcclusion(root, meshes, proxies, label, k = 1) {
     C.needsUpdate = true;
   }
 }
+
+// stitching: small thread quads laid along a surface path [[a, y], ...] every `spacing` metres, lifted by h
+export function stitchGeo(surf, ay, { spacing = 0.011, len = 0.0065, wid = 0.0022, h = 0.0006, closed = false } = {}) {
+  const pts = ay.map(([a, y]) => surf.pos(a, y)), L = [0];
+  for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  const P = [], N = [], idx = [], tot = L[L.length - 1], n = Math.floor(tot / spacing);
+  const tg = new THREE.Vector3(), nr = new THREE.Vector3(), bi = new THREE.Vector3();
+  let k = 0;
+  for (let s = 0; s < n; s++) {
+    const d = (s + 0.5) * spacing; while (k < L.length - 2 && L[k + 1] < d) k++;
+    const t = (d - L[k]) / Math.max(1e-9, L[k + 1] - L[k]);
+    const a = ay[k][0] + (ay[k + 1][0] - ay[k][0]) * t, y = ay[k][1] + (ay[k + 1][1] - ay[k][1]) * t;
+    const c = surf.at(a, y, h); surf.nrm(a, y, nr); tg.subVectors(pts[k + 1], pts[k]).normalize(); bi.crossVectors(nr, tg).normalize();
+    const base = P.length;
+    for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { P.push(c.clone().addScaledVector(tg, u * len / 2).addScaledVector(bi, v * wid / 2)); N.push(nr.clone()); }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(P.flatMap((p) => [p.x, p.y, p.z])), 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(N.flatMap((p) => [p.x, p.y, p.z])), 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(P.length * 2), 2));
+  const col = new Float32Array(P.length * 3); for (let i = 0; i < P.length; i++) col[i * 3] = 0.75;
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setIndex(idx);
+  // orient so the quads face along the surface normal
+  const a0 = new THREE.Vector3().fromArray(g.attributes.position.array, 0), a1 = new THREE.Vector3().fromArray(g.attributes.position.array, 3), a2 = new THREE.Vector3().fromArray(g.attributes.position.array, 6);
+  if (a1.clone().sub(a0).cross(a2.clone().sub(a0)).dot(N[0]) < 0) { const ix = g.index.array; for (let i = 0; i < ix.length; i += 3) { const tmp = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = tmp; } }
+  return g;
+}
