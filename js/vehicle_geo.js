@@ -177,6 +177,33 @@ export function slab(outline, depth, bevel = 0.004, curveSeg = 4) {
 }
 export function rbox(RoundedBox, w, h, d, r = 0.02, seg = 2) { return new RoundedBox(w, h, d, seg, Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4)); }
 
+// chamfered box: 6 faces + 12 bevel strips + 8 corner tris = 44 triangles, flat-shaded (reads as a machined bevel)
+export function cbox(w, h, d, c = 0.01) {
+  const X = w / 2, Y = h / 2, Z = d / 2; c = Math.min(c, X * 0.9, Y * 0.9, Z * 0.9);
+  const P = [];
+  const v = (x, y, z) => new THREE.Vector3(x, y, z);
+  const face = (pts) => {   // convex polygon, wound so its normal points away from the box centre
+    const n = pts[1].clone().sub(pts[0]).cross(pts[2].clone().sub(pts[0]));
+    const cen = pts.reduce((a, p) => a.add(p), v(0, 0, 0)).multiplyScalar(1 / pts.length);
+    if (n.dot(cen) < 0) pts = pts.slice().reverse();
+    for (let i = 1; i < pts.length - 1; i++) P.push(pts[0], pts[i], pts[i + 1]);
+  };
+  for (const s of [-1, 1]) {
+    face([v(-X + c, -Y + c, s * Z), v(X - c, -Y + c, s * Z), v(X - c, Y - c, s * Z), v(-X + c, Y - c, s * Z)]);
+    face([v(s * X, -Y + c, -Z + c), v(s * X, Y - c, -Z + c), v(s * X, Y - c, Z - c), v(s * X, -Y + c, Z - c)]);
+    face([v(-X + c, s * Y, -Z + c), v(X - c, s * Y, -Z + c), v(X - c, s * Y, Z - c), v(-X + c, s * Y, Z - c)]);
+  }
+  for (const a of [-1, 1]) for (const b of [-1, 1]) {
+    face([v(-X + c, a * Y, b * (Z - c)), v(X - c, a * Y, b * (Z - c)), v(X - c, a * (Y - c), b * Z), v(-X + c, a * (Y - c), b * Z)]);   // edges along X
+    face([v(a * X, -Y + c, b * (Z - c)), v(a * X, Y - c, b * (Z - c)), v(a * (X - c), Y - c, b * Z), v(a * (X - c), -Y + c, b * Z)]);   // edges along Y
+    face([v(a * X, b * (Y - c), -Z + c), v(a * X, b * (Y - c), Z - c), v(a * (X - c), b * Y, Z - c), v(a * (X - c), b * Y, -Z + c)]);   // edges along Z
+  }
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const e of [-1, 1]) face([v(a * (X - c), b * (Y - c), e * Z), v(a * X, b * (Y - c), e * (Z - c)), v(a * (X - c), b * Y, e * (Z - c))]);
+  const g = new THREE.BufferGeometry().setFromPoints(P); g.computeVertexNormals();
+  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(P.length * 2), 2));
+  return g;
+}
+
 // warp every vertex of a geometry: f(Vector3) mutates in place; normals recomputed (non-indexed keeps facets per original vertex normals -> recompute smooth)
 export function warp(geo, f, recompute = true) {
   const p = geo.attributes.position; const v = new THREE.Vector3();

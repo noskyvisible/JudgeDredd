@@ -597,13 +597,15 @@ export function makeLawmasterModel(pal = {}) {
   }
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 4.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.glowTex(), color: new THREE.Color(P.glow).multiplyScalar(0.5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }));
   pool.position.set(0, 0.03, -0.05); pool.renderOrder = 4; g.add(pool);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 4.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.shadowTex(), color: 0x000000, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+  shadow.position.set(0, 0.02, -0.05); shadow.renderOrder = 3; g.add(shadow);
 
   // ---------------- handles ----------------
   g.userData = {
     rear, front, rearSpin, frontSpin, wr: rearSpin, wf: frontSpin, spot, siren,
     sirenL: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenL), sirenR: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenR),   // bike.js flashes .material.color
     exhaust: [V3(-0.41, 0.53, -2.1), V3(0.41, 0.53, -2.1)],
-    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool,
+    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow,
     anchors: {
       seat: V3(0, 1.19, -0.58),
       pegL: pegs[0].clone(), pegR: pegs[1].clone(),
@@ -711,7 +713,7 @@ export function updateLawmasterVisuals(bike, dt) {
   u.flares.tail.material.opacity = live ? (on ? 0.55 : 0.35) : 0;
   u.flares.brake.material.opacity = live ? V.brakeK * 0.9 : 0;
   u.beam.material.uniforms.time.value = V.t; u.beam.material.uniforms.k.value = on ? 1 : 0; u.beam.visible = on;
-  u.pool.rotation.z = -(bike.model.rotation.z || 0); u.pool.material.opacity = live ? 0.55 + 0.25 * pulse * (on ? 1 : 0.3) : 0;
+  u.pool.rotation.z = -(bike.model.rotation.z || 0); u.shadow.rotation.z = u.pool.rotation.z; u.shadow.visible = !bike.crashed; u.pool.material.opacity = live ? 0.55 + 0.25 * pulse * (on ? 1 : 0.3) : 0;
   u.exhaust[0].set(-0.41, 0.53 - V.cr * 0.6, -2.1); u.exhaust[1].set(0.41, 0.53 - V.cr * 0.6, -2.1);
 }
 

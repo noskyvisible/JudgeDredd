@@ -203,6 +203,18 @@ export const glowTex = () => once('glow', () => {
   g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,0.55)'); g.addColorStop(0.45, 'rgba(255,255,255,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, S, S); return canvasTex(c);
 });
+// --- soft contact shadow (dark centre, feathered rectangle-ish falloff) ---
+export const shadowTex = () => once('shadow', () => {
+  const S = 128, [c, x] = makeCanvas(S, S); const img = x.createImageData(S, S), d = img.data;
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const u = Math.abs(i / (S - 1) * 2 - 1), v = Math.abs(j / (S - 1) * 2 - 1);
+    const r = Math.pow(Math.pow(u, 4) + Math.pow(v, 4), 0.25);   // squircle
+    const a = Math.max(0, 1 - Math.pow(Math.max(0, r - 0.35) / 0.65, 1.4));
+    const k = (j * S + i) * 4; d[k] = d[k + 1] = d[k + 2] = 0; d[k + 3] = Math.round(255 * a * a);
+  }
+  x.putImageData(img, 0, 0); return canvasTex(c);
+});
+
 // --- anamorphic streak sprite (horizontal flare) ---
 export const streakTex = () => once('streak', () => {
   const W = 256, H = 32, [c, x] = makeCanvas(W, H);
