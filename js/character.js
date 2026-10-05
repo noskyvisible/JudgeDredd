@@ -127,13 +127,15 @@ for (const c of Object.values(CLIPS)) for (const f of c.frames) {
 // ---------------------------------------------------------------------------
 export const STYLES = {
   dredd: { scale: 0.9, bulk: 1.15, hero: true, eagle: true, gold: 0xd6a328, skin: 0xb98a6a, visor: 0xff3020 },
-  thug: { scale: 0.86, bulk: 1.0, armor: 0x5a3a2a, under: 0x2a2a3a, gold: 0x777777, skin: 0xc09070, hair: 0x2a1a10, boots: 0x15151a },
-  gunman: { scale: 0.86, bulk: 1.0, armor: 0x2a3a4a, under: 0x1a1a24, gold: 0x999999, skin: 0xa07860, hair: 0x111111, boots: 0x101015, mask: 0x111111 },
-  brute: { scale: 1.08, bulk: 1.45, armor: 0x4a4a52, under: 0x2a2020, gold: 0xb04a2a, skin: 0x9a7a6a, hair: 0x000000, boots: 0x101010, plates: 0x6a6a74 },
-  junkie: { scale: 0.82, bulk: 0.85, armor: 0x2a5a4a, under: 0x3a2a4a, gold: 0x5aff9a, skin: 0xb0a080, hair: 0x80ff40, boots: 0x202030 },
-  biker: { scale: 0.88, bulk: 1.05, armor: 0x5a1a22, under: 0x1a1218, gold: 0xaa2a3a, skin: 0xa07860, hair: 0x111111, boots: 0x0a0a0a, helmetCol: 0x7a1a28 },
-  boss: { scale: 1.3, bulk: 1.55, armor: 0x6a1a1a, under: 0x1a1010, gold: 0xe8b52a, skin: 0x8a6a5a, hair: 0x000000, boots: 0x0a0a0a, plates: 0x8a2222, mask: 0xaa1111 },
-  civ: { scale: 0.82, bulk: 0.95, armor: 0x3a4a6a, under: 0x2a2a3a, gold: 0x888888, skin: 0xc09070, hair: 0x3a2a1a, boots: 0x202025 },
+  // generic perps / civilians (js/chargeneric.js): colours come from seeded per-look palettes; opts may still pass
+  // armor / under / skin / hair (hex) overrides, plus seed / variant (look index) / height
+  thug: { scale: 0.86, bulk: 1.0 },
+  gunman: { scale: 0.86, bulk: 1.0, glow: 0xff3418 },
+  brute: { scale: 1.08, bulk: 1.45 },
+  junkie: { scale: 0.84, bulk: 0.85, glow: 0x7dff3a },
+  biker: { scale: 0.88, bulk: 1.05 },
+  boss: { scale: 1.3, bulk: 1.55, glow: 0xff7a20 },
+  civ: { scale: 0.82, bulk: 0.95 },
 };
 export const CHAR_HEIGHT = { dredd: 2.15, default: 2.1 }; // rig head-centre height per unit scale (see hit spheres)
 

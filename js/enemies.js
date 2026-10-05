@@ -4,7 +4,8 @@ import { fx } from './fx.js';
 import { audio } from './audio.js';
 import { world } from './world.js';
 import { weapons } from './weapons.js';
-import { Character, makePistol, makeBat } from './character.js';
+import { Character } from './character.js';
+import { makePistol, makeBat } from './propsperp.js';
 import { rand, pick, chance, clamp, lerp, angDiff, dampAngle, damp, segSphere, makeCanvas, canvasTex, randInt } from './util.js';
 
 const FIRST = ['Zed', 'Mick', 'Dolly', 'Rico', 'Vince', 'Lola', 'Hoss', 'Tank', 'Skeet', 'Nico', 'Brick', 'Fang', 'Gus', 'Mona', 'Ratty', 'Dex', 'Kira', 'Moe', 'Slim', 'Otto'];
