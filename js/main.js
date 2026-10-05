@@ -115,7 +115,7 @@ G.callBike = () => {
 const titleEl = document.getElementById('title'), startBtn = document.getElementById('startbtn');
 function startGame() {
   audio.init(); G.started = true; G.paused = false; titleEl.classList.add('hidden'); hud.show(true);
-  player.pos.copy(world.spawnPos); post.uniforms.uFade.value = 1; camera.fov = 62; camera.updateProjectionMatrix();
+  player.pos.copy(world.spawnPos); post.uniforms.uFade.value = 1; post.uniforms.uDof.value = 0; camera.fov = 62; camera.updateProjectionMatrix();
   input.lock();
   G.crimes.dispatch('brawl');
   const tips = [[2500, 'Follow the gold marker to the crime scene — TAB cycles crimes'], [6000, 'Walk to the Lawmaster and press E to mount it'],
@@ -236,12 +236,22 @@ function updateTitle(dt) {
   player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
   world.update(dt, camera.position); fx.update(dt, dt);
   post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
+  const Ut = post.uniforms; Ut.uDof.value = QUALITY[G.quality].ao ? 0.8 : 0; Ut.uFocus.value = camera.position.distanceTo(_tl) * 0.95;
+}
+// depth of field on the cinematic moments only: pause / map, the finisher camera, the judgement dialog
+function updateDof(dt) {
+  if (!G.started) return;
+  const U = post.uniforms; let target = 0, focus = U.uFocus.value;
+  if (G.paused || G.mapOpen) { target = 1; focus = camera.position.distanceTo(player.pos) + 0.5; }
+  else if (G.finisherCam) { target = 0.55; focus = camera.position.distanceTo(player.pos) + 0.3; }
+  else if (G.modal) { target = 0.9; focus = 4; }
+  U.uDof.value = damp(U.uDof.value, QUALITY[G.quality].ao ? target : 0, 5, dt); U.uFocus.value = damp(U.uFocus.value, focus, 8, dt);
 }
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   if (!G.started && !window.__noRender) updateTitle(dt);
-  simulate(dt);
+  simulate(dt); updateDof(dt);
   if (!window.__noRender) renderFrame();
   input.endFrame();
   frames++; acc += dt;

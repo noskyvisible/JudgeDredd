@@ -173,6 +173,7 @@ void main(){
 class SSAOPass extends Pass {
   constructor(camera, w, h) {
     super();
+    this.depthTex = null;
     this.needsSwap = false; this.camera = camera; this.radius = 1.7; this.strength = 2.6; this.samples = 10;
     this.quad = new FullScreenQuad(null);
     const o = { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false };
@@ -192,6 +193,7 @@ class SSAOPass extends Pass {
   setSize(w, h) { this.w = Math.max(2, Math.floor(w / 2)); this.h = Math.max(2, Math.floor(h / 2)); for (const r of this.rt) r.setSize(this.w, this.h); }
   render(renderer, writeBuffer, readBuffer) {
     const depth = readBuffer.depthTexture; if (!depth) return;
+    this.depthTex = depth;
     const c = this.camera, pm = c.projectionMatrix, am = this.aoMat.uniforms, bm = this.blurMat.uniforms, prev = renderer.getRenderTarget();
     am.tDepth.value = depth; am.res.value.set(this.w, this.h); am.proj.value.set(pm.elements[0], pm.elements[5]); am.projMat.value.copy(pm);
     am.near.value = c.near; am.far.value = c.far; am.uRadius.value = this.radius; am.uStrength.value = this.strength;
@@ -215,6 +217,7 @@ const SCRUB = {
 const FINAL = {
   uniforms: {
     tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null }, tAO: { value: null }, uAO: { value: 1 }, uDbg: { value: 0 }, uFade: { value: 1 },
+    tDepth: { value: null }, uDof: { value: 0 }, uFocus: { value: 10 }, uAperture: { value: 1.6 }, uNear: { value: 0.1 }, uFar: { value: 1000 },
     time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) },
     uBloom: { value: 0.55 }, uStreak: { value: 0.5 }, uExposure: { value: 1.12 },
     aber: { value: 0.0006 }, vig: { value: 0.42 }, grain: { value: 0.025 }, speed: { value: 0 }, sharpen: { value: 0.3 },
@@ -222,7 +225,7 @@ const FINAL = {
     shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
   },
   vertexShader: VERT,
-  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO; uniform float uAO, uDbg, uFade; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO, tDepth; uniform float uAO, uDbg, uFade, uDof, uFocus, uAperture, uNear, uFar; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
     vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -240,6 +243,25 @@ const FINAL = {
     vec3 encode(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
     // AO darkens ambient light only: bright (emissive) pixels are exempt so neon never gets dirty halos
     vec3 hdr(vec2 uv) { vec3 c = texture2D(tDiffuse, uv).rgb; float ao = texture2D(tAO, uv).r; return c * mix(1.0, ao, uAO * (1.0 - smoothstep(0.8, 2.6, luma(c)))); }
+    // depth of field (cinematics only): circle of confusion from scene depth, gathered over a golden-angle disc; bright pixels weigh more so lights become bokeh
+    float distZ(vec2 uv) { float d = texture2D(tDepth, uv).r; return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
+    float cocAt(float z) { return clamp(abs(z - uFocus) / max(z, 0.5) * uAperture, 0.0, 1.0); }
+    vec3 sceneColor(vec2 uv) {
+      if (uDof < 0.001) return hdr(uv);
+      float maxR = 16.0 * res.y / 1080.0 * uDof;
+      float z = distZ(uv), coc = cocAt(z) * maxR;
+      if (coc < 0.7) return hdr(uv);
+      vec3 acc = hdr(uv); float ws = 1.0; vec2 px = 1.0 / res;
+      for (int i = 0; i < 16; i++) {
+        float fi = float(i) + 0.5, a = fi * 2.399963, r = sqrt(fi / 16.0) * coc;
+        vec2 suv = uv + vec2(cos(a), sin(a)) * r * px;
+        float sc = cocAt(distZ(suv)) * maxR;
+        vec3 c = hdr(suv);
+        float w = clamp(sc - r + 1.0, 0.0, 1.0) * (1.0 + luma(c) * 0.5);
+        acc += c * w; ws += w;
+      }
+      return acc / ws;
+    }
     void main(){
       vec2 uv = vUv; float aspect = res.x / res.y;
       // expanding shockwave rings bend the image
@@ -259,7 +281,7 @@ const FINAL = {
         vec3 acc = vec3(0.0);
         for (int i = 0; i < 8; i++) { float t = float(i) / 7.0; acc += hdr(0.5 + c * (1.0 - speed * 0.07 * t)); }
         col = acc / 8.0;
-      } else col = hdr(uv);
+      } else col = sceneColor(uv);
       // chromatic aberration grows toward the edges
       vec2 off = c * aber * (1.0 + d2 * 8.0);
       col.r = hdr(uv + off).r * 0.5 + col.r * 0.5;
@@ -301,7 +323,7 @@ export function createPost(renderer, scene, camera, W, H, PR) {
   const post = new ShaderPass(FINAL);
   composer.addPass(post);
   const U = post.uniforms;
-  const sync = () => { U.tBloom.value = bloom.bloomTex; U.tStreak.value = bloom.streakTex; U.tAO.value = ssao.aoTex; };
+  const sync = () => { U.tBloom.value = bloom.bloomTex; U.tStreak.value = bloom.streakTex; U.tAO.value = ssao.aoTex; U.tDepth.value = composer.renderTarget2.depthTexture; U.uNear.value = camera.near; U.uFar.value = camera.far; };
   const origRender = post.render.bind(post);
   post.render = (r, wb, rb, dt, mask) => { sync(); origRender(r, wb, rb, dt, mask); };
   return {

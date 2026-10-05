@@ -48,6 +48,12 @@ export class GroundReflection {
   // Renders the mirrored view.  Leaves the shadow map freshly updated for the main pass to reuse.
   render(renderer, scene, camera) {
     if (!this.enabled) return false;
+    // skip the whole second pass when the ground cannot be on screen (looking steeply up) or is too far below to matter
+    camera.updateMatrixWorld();
+    _f.set(0, 0, -1).transformDirection(camera.matrixWorld);
+    const camY = camera.matrixWorld.elements[13];
+    if (camY > 140 || _f.y > Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) + 0.06) { this.uniforms.uReflOn.value = 0; return false; }
+    this.uniforms.uReflOn.value = 1;
     const size = renderer.getDrawingBufferSize(_t);
     this.resize(size.x, size.y);
     camera.updateMatrixWorld();

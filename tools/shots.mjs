@@ -36,6 +36,10 @@ export const SHOTS = {
   facade_far:  { at: [-345, 90, 0], free: { pos: [-343, 6, 140], look: [-372, 24, 70], fov: 60 }, settle: 40 },
   rooftop:     { at: [150, 50, 0], roofOf: { near: [150, 50], range: 140, look: [150, 2, 50], fov: 70 }, settle: 40 },
   title0:      { title: [0, 12] }, title1: { title: [1, 8] }, title2: { title: [2, 13] },
+  boom_a:      { at: [-250, 50, 0], free: { pos: [-243, 2.4, 42], look: [-248.5, 2.5, 39], fov: 60 }, settle: 20, setup: 'boom', boomSteps: 6 },
+  boom_b:      { at: [-250, 50, 0], free: { pos: [-243, 2.4, 42], look: [-248.5, 2.5, 39], fov: 60 }, settle: 20, setup: 'boom', boomSteps: 18 },
+  boom_c:      { at: [-250, 50, 0], free: { pos: [-243, 2.4, 42], look: [-248.5, 2.5, 39], fov: 60 }, settle: 20, setup: 'boom', boomSteps: 40 },
+  boom:        { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.18, dist: 7 }, settle: 30, setup: 'boom' },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -78,6 +82,12 @@ for (const name of names) {
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     // settle: let lights hop, traffic spawn, the camera catch up
     for (let i = 0; i < sh.settle; i++) { if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; } window.__step(1); }
+    if (sh.setup === 'boom') { // a Hi-Ex style explosion ahead of Dredd plus a muzzle flash and some sparks, rendered mid-burst
+      const f = T.fx, at = new THREE.Vector3(P.pos.x + 1.5, 0, P.pos.z - 11);
+      f.explosion(at.clone().setY(1.2), 2.4); f.shake(0); T.weapons.firePatches.push({ pos: at.clone().add(new THREE.Vector3(4, 0, 2)), r: 3, t: 9, tick: 0, owner: null });
+      f.spark(at.clone().setY(1.5), 60, 0xffc060, 18, 0.9); f.muzzle(new THREE.Vector3(P.pos.x - 0.6, 1.5, P.pos.z - 0.8), new THREE.Vector3(0.15, 0, -1), 0xffd070);
+      for (let i = 0; i < (sh.boomSteps || 16); i++) window.__step(1);
+    }
     if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
       T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);
       document.getElementById('title').classList.remove('hidden');
