@@ -178,13 +178,13 @@ L.thug = [
 ];
 L.gunman = [
   { body: { b: 1.0 }, head: { jawW: 0.9 }, face: 'faceGunA', eyes: 'eyeA', mask: { kind: 'balaclava', swatch: 'balaclava' }, hat: null, eyewear: { kind: 'goggles', glow: true },
-    top: { kind: 'vest', swatch: 'plateCarrier', len: 'waist', y0: 1.12, y1: 1.84, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'long', sleeveSwatch: 'sleeveTac' },
+    top: { kind: 'vest', straps: true, swatch: 'plateCarrier', len: 'waist', y0: 1.12, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'long', sleeveSwatch: 'sleeveTac' },
     legs: { swatch: 'legCamo', pelvis: 'pelvisCamo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'kneepads' }, { kind: 'pouches' }, { kind: 'holster' }] },
   { body: { b: 1.02 }, head: { jawW: 0.92, brow: 0.014 }, face: 'faceGunB', eyes: 'eyeA', hair: { kind: 'buzz' }, hat: { kind: 'cap', swatch: 'capTac' }, mask: { kind: 'respirator', swatch: 'respirator' },
     top: { kind: 'jacket', swatch: 'fieldCamo', sleeveSwatch: 'fieldCamoSleeve', len: 'hip', collar: 'shirt', collarSwatch: 'fieldCollar', collarGap: 0.42 }, shirt: { swatch: 'shirtTac' },
     legs: { swatch: 'legCamo', pelvis: 'pelvisCamo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'bandolier' }, { kind: 'holster' }] },
   { body: { b: 0.98 }, head: { jawW: 0.86 }, face: 'faceGunA', eyes: 'eyeB', hair: { kind: 'buzz' }, hat: { kind: 'beanie', swatch: 'beanie' }, eyewear: { kind: 'goggles', glow: true, overHat: false }, mask: { kind: 'bandanaFace', swatch: 'respirator' },
-    top: { kind: 'vest', swatch: 'plateCarrier', len: 'waist', y0: 1.12, y1: 1.84, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'rolled', sleeveSwatch: 'sleeveTac' }, armSkin: 'armHairy',
+    top: { kind: 'vest', straps: true, swatch: 'plateCarrier', len: 'waist', y0: 1.12, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'rolled', sleeveSwatch: 'sleeveTac' }, armSkin: 'armHairy',
     legs: { swatch: 'legCargo', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac', fingerless: true }, acc: [{ kind: 'belt' }, { kind: 'pouches' }, { kind: 'holster' }] },
   { body: { b: 1.05 }, head: { jawW: 0.95, chin: 0.016 }, face: 'faceGunB', eyes: 'eyeA', hair: { kind: 'buzz' }, eyewear: { kind: 'shades', glow: false },
     top: { kind: 'jacket', swatch: 'fieldJacket', sleeveSwatch: 'fieldSleeve', len: 'hip', collar: 'shirt', collarSwatch: 'fieldCollar', collarGap: 0.42, gap: 0.25, gapY0: 1.45 }, shirt: { swatch: 'shirtTac' },

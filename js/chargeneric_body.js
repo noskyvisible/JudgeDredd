@@ -66,8 +66,9 @@ export function torsoAt(B, y, off = 0) {
   const up = sstep(1.35, 1.6, y);
   rx *= 1 + ((B.chest ?? 1) - 1) * up; rz *= (1 + ((B.chest ?? 1) - 1) * 0.8 * up) * (1 + 0.06 * up * (1 - sstep(1.72, 1.85, y)));
   // shoulder yoke reaches out towards the deltoids
-  const yoke = gauss((y - 1.755) / 0.045);
-  rx = lerp(rx, Math.max(rx, B.W - 0.02 * (B.armK ?? 1)), yoke * 0.9);
+  // the shoulder line overhangs the arm socket: arms emerge from under a rounded yoke (no ball-joint look)
+  const yoke = gauss((y - 1.772) / 0.055);
+  rx = lerp(rx, Math.max(rx, B.W + 0.028 * (B.armK ?? 1)), yoke * 0.92);
   // hunch: upper chest leans forward, upper back rounds
   const hz = (B.hunch || 0) * sstep(1.35, 1.85, y) * 0.06;
   return { rx: rx + off, rz: rz + off, cz: cz + hz, e };
@@ -251,7 +252,7 @@ export function bootPieces(kind, rects, o = {}) {
   const soleT = { combat: 0.026, biker: 0.02, work: 0.026, sneaker: 0.024, dress: 0.012, heel: 0.01, flat: 0.01 }[kind] ?? 0.02;
   const G = -0.0595, soleTop = G + soleT;
   const wide = kind === 'combat' || kind === 'work' || kind === 'biker' ? 1.06 : kind === 'heel' || kind === 'flat' ? 0.86 : 1;
-  const len = (kind === 'heel' || kind === 'flat' ? 0.9 : kind === 'combat' || kind === 'biker' ? 1.05 : 1) * s;
+  const len = (kind === 'heel' || kind === 'flat' ? 0.95 : kind === 'combat' || kind === 'biker' || kind === 'work' ? 1.12 : 1.06) * s;
   // shaft
   if (top > -0.005) {
     const ys = [top, top - 0.03, (top + 0.0) / 2, 0.02, -0.005, -0.02].filter((y, i, a) => i === 0 || (y < a[i - 1] - 0.008));
@@ -301,7 +302,7 @@ export function bootPieces(kind, rects, o = {}) {
 // ---------------------------------------------------------------------------
 export function buildLook(spec, A) {
   const B = { ...spec.body };
-  B.b = B.b ?? 1; B.armK = B.armK ?? B.b; B.legK = B.legK ?? B.b;
+  B.b = B.b ?? 1; B.armK = B.armK ?? B.b; B.legK = B.legK ?? B.b; B.neckK = B.neckK ?? (B.fem ? 0.88 : 0.9 + 0.22 * B.b);
   const W = B.W ?? (0.36 * B.b + 0.02 - (B.fem ? 0.03 : 0));
   const HW = B.HW ?? (0.15 + 0.05 * B.b * (B.fem ? 1.06 : 1));
   B.W = W; B.HW = HW;
@@ -361,7 +362,20 @@ function buildTorso(c) {
   if (outer) {
     const y0 = top.y0 ?? ({ crop: 1.25, waist: 1.08, hip: 0.98, thigh: 0.86, coat: 0.86 }[top.len || 'hip']);
     const rect = AR.uv(top.swatch);
-    if (top.tank) {
+    if (top.straps) {
+      torsoLayer(K, B, { slot: shirtSlot, rect: shirt.rect || shirtRect, off: 0.006, y0: 1.06, y1: shirtTop, seg: 24, vRange: [1.06, 1.92], hemBot: true });
+      torsoLayer(K, B, { slot: top.slot || 'armor', rect, off: top.off ?? 0.04, y0, y1: 1.68, seg: top.seg ?? 24, vRange: [top.vY0 ?? 0.86, 1.92], hemBot: true, hemTop: true, aoK: 1 });
+      for (const [cen, w0, w1] of [[0, 0.95, 0.42], [Math.PI, 1.0, 0.46]]) {
+        const rings = [];
+        for (let i = 0; i <= 5; i++) {
+          const y = 1.62 + i * 0.05, T = torsoAt(B, y, (top.off ?? 0.04) * lerp(1, 0.5, i / 5)), w = lerp(w0, w1, sstep(1.62, 1.82, y));
+          rings.push({ c: [0, y, T.cz], rx: T.rx, rz: T.rz, e: T.e, f: dampBulge(torsoBulge(B, y), 0.03), a0: cen - w, a1: cen + w, v: clamp((y - 0.86) / 1.06, 0, 1) });
+        }
+        const P = loftVar(rings, { seg: 12 });
+        for (let i = 0; i < P.uv.length; i += 2) if (P.uv[i] < 0) P.uv[i] += 1;
+        K.add('chest', top.slot || 'armor', P, { rect, group: 'torso' });
+      }
+    } else if (top.tank) {
       // body of the tank up to the armpits, then front & back panels narrowing into straps over bare shoulders
       torsoLayer(K, B, { slot: top.slot || 'armor', rect, off: top.off ?? 0.008, y0, y1: 1.7, seg: top.seg ?? 26, vRange: [top.vY0 ?? 0.86, 1.92], hemBot: true, aoK: 1 });
       torsoLayer(K, B, { slot: 'skin', rect: c.SK.uv(spec.armSkin || 'armPlain'), off: 0.0, y0: 1.6, y1: 1.905, seg: 24, vRange: [1.0, 2.2] });
@@ -478,19 +492,19 @@ function buildArms(c) {
     const sleeveEnd = { long: 0.4, rolled: 0.17, short: 0.2, cap: 0.08, none: -1 }[sl] ?? 0.4; // long/rolled are forearm distances; short/cap upper-arm distances
     // deltoid cap
     const dOff = sl !== 'none' ? off : 0;
-    const delt = ellipsoid(0.09 * ak + dOff, 0.092 * ak + dOff, 0.094 * ak + dOff, 12, 9);
-    move(delt, J[0] + s * 0.008 * ak, J[1] - 0.012, J[2]);
+    const delt = ellipsoid(0.092 * ak + dOff, 0.08 * ak + dOff, 0.096 * ak + dOff, 12, 9);
+    move(delt, J[0] + s * 0.012 * ak, J[1] - 0.058, J[2]); // sits under the shoulder overhang
     const deltRect = sl === 'none' ? armSkin : rect;
     uvSet(delt, 0.5, 0.97); // top of the sleeve swatch
     K.add('sh' + L, sl === 'none' ? 'skin' : slot, delt, { rect: deltRect, group: g, aoK: 0.7 });
     // upper arm
     if (sl === 'none') {
-      limb(K, { bone: 'sh' + L, slot: 'skin', rect: armSkin, J, prof: UPPER, d0: -0.05, d1: 0.43, k: ak, side: s, own: [-1, 0.39], v: vU, group: g });
+      limb(K, { bone: 'sh' + L, slot: 'skin', rect: armSkin, J, prof: UPPER, d0: 0.0, d1: 0.43, k: ak, side: s, own: [-1, 0.39], v: vU, group: g, capTop: true });
     } else if (sl === 'short' || sl === 'cap') {
-      limb(K, { bone: 'sh' + L, slot, rect, J, prof: UPPER, d0: -0.05, d1: sleeveEnd, k: ak, side: s, off, v: vU, group: g, hemBot: true });
+      limb(K, { bone: 'sh' + L, slot, rect, J, prof: UPPER, d0: 0.0, d1: sleeveEnd, k: ak, side: s, off, v: vU, group: g, hemBot: true, capTop: true });
       limb(K, { bone: 'sh' + L, slot: 'skin', rect: armSkin, J, prof: UPPER, d0: sleeveEnd - 0.04, d1: 0.43, k: ak * 0.985, side: s, own: [sleeveEnd, 0.39], v: vU, group: g });
     } else {
-      limb(K, { bone: 'sh' + L, slot, rect, J, prof: UPPER, d0: -0.05, d1: 0.43, k: ak, side: s, off, own: [-1, 0.39], v: vU, group: g });
+      limb(K, { bone: 'sh' + L, slot, rect, J, prof: UPPER, d0: 0.0, d1: 0.43, k: ak, side: s, off, own: [-1, 0.39], v: vU, group: g, capTop: true });
     }
     // elbow filler (in the forearm bone, centred on the joint)
     const elR = 0.058 * ak + (sl === 'long' || sl === 'rolled' ? off : 0);
@@ -577,10 +591,12 @@ function buildHeadAndNeck(c) {
   const neckP = loft(nrings, { seg: 16, a0: -Math.PI, a1: Math.PI });
   K.add('neck', 'skin', neckP, { rect: face, group: 'neck', aoK: 1 });
   if (!hidden) {
-    const cov = spec.hat && HAT[spec.hat.kind]?.covers;
-    const head = headPiece(H, { covered: cov ? (th, ph) => cov(th, ph, spec.hat) : null }); toRig(head); K.add('head', 'skin', head, { rect: face, group: 'head', aoK: 0.8 });
-    const nose = nosePiece(H); toRig(nose); K.add('head', 'skin', nose, { rect: face, group: 'head', aoK: 0 });
-    const earsHidden = (spec.hat && HAT[spec.hat.kind]?.hidesEars) || (spec.hair && ['long', 'afro', 'dreads'].includes(spec.hair.kind));
+    const cov = spec.hat && HAT[spec.hat.kind]?.covers, mcov = spec.mask && MASK[spec.mask.kind]?.covers;
+    const covered = cov || mcov ? (th, ph) => (cov && cov(th, ph, spec.hat)) || (mcov && mcov(th, ph)) : null;
+    const head = headPiece(H, { covered }); toRig(head); K.add('head', 'skin', head, { rect: face, group: 'head', aoK: 0.8 });
+    if (!(spec.mask && MASK[spec.mask.kind]?.hidesNose)) { const nose = nosePiece(H); toRig(nose); K.add('head', 'skin', nose, { rect: face, group: 'head', aoK: 0 }); }
+    const mk = spec.mask && MASK[spec.mask.kind];
+    const earsHidden = (spec.hat && HAT[spec.hat.kind]?.hidesEars) || (spec.hair && ['long', 'afro', 'dreads'].includes(spec.hair.kind)) || mk?.hidesEars;
     if (!earsHidden) for (const s of [1, -1]) { const e = earPiece(H, s); toRig(e); K.add('head', 'skin', e, { rect: face, group: 'head', aoK: 0 }); }
     // eye patches: hi-res painted eyes on a skin-tight patch
     const er = SK.uv(spec.eyes || 'eyeA');
@@ -914,6 +930,10 @@ const MASK = {
     }
     P.ix = keep;
     toRig(P); K.add('head', 'armor', P, { rect, group: 'head', aoK: 0.4 });
+    // neck gaiter so no skin shows between mask and collar
+    const nk = c.B.neckK ?? 1, rings = [];
+    for (const [y, r] of [[1.82, 0.104], [1.88, 0.084], [1.95, 0.076], [2.02, 0.074], [2.08, 0.07]]) rings.push({ c: [0, y, -0.008], rx: r * nk, rz: r * nk * 1.04, v: (y - 1.82) / 0.26 * 0.3 });
+    K.add('neck', 'armor', loft(rings, { seg: 16 }), { rect, group: 'neck', aoK: 0.5 });
   },
 };
 const EYEWEAR = {
@@ -1080,7 +1100,7 @@ const ACC = {
       }
       // thickness: outer surface + rim (inner edge strip)
       const P = loftVar(rings, { seg: 12, uAbs: false });
-      const I = loftVar(rings.map((r) => ({ ...r, rx: r.rx - 0.016, rz: r.rz - 0.016 })), { seg: 12, uAbs: false, inside: true }); aoMul(I, () => 0.4);
+      const I = loftVar(rings.filter((r, i) => i % 2 === 0 || i === rings.length - 1).map((r) => ({ ...r, rx: r.rx - 0.016, rz: r.rz - 0.016 })), { seg: 6, uAbs: false, inside: true }); aoMul(I, () => 0.4);
       K.add(bone, 'armor', P, { rect, group: 'torso', aoK: 0.4 });
       K.add(bone, 'armor', I, { rect, group: 'torso', aoK: 0 });
     };
@@ -1151,14 +1171,14 @@ const ACC = {
       const len = a.len ?? 0.66;
       for (const [a0, a1, fr] of [[-Math.PI * 0.16, Math.PI * 0.62, true], [Math.PI * 0.4, Math.PI * 1.45, false]]) {
         const rings = [];
-        const ds = [-0.07, 0.04, 0.16, 0.3, 0.44, 0.56, len].filter((d, i, arr) => i === 0 || d > arr[i - 1]);
+        const ds = [-0.07, 0.08, 0.26, 0.44, len].filter((d, i, arr) => i === 0 || d > arr[i - 1]);
         for (const d of ds) {
           // flat curtains: wide laterally (meeting at the back), shallow front-to-back, gently flared
           const [rx, rz] = table(THIGH, Math.max(0, Math.min(d, 0.46))), t = sstep(0.0, len, d), fl = 0.05 * t * B.b;
           rings.push({ c: [J[0] - s * (0.025 + 0.015 * t), J[1] - d, J[2] + (fr ? 0.004 : -0.01)], rx: rx * lk + 0.032 * B.b + fl + 0.015 * t, rz: rz * lk + 0.016 + fl * 0.6, v: 1 - (d + 0.07) / (len + 0.07), e: 2.6 });
         }
         const sa0 = s > 0 ? a0 : -a1, sa1 = s > 0 ? a1 : -a0;
-        const P = loftVar(rings.reverse(), { seg: 10, uAbs: false });
+        const P = loftVar(rings.reverse(), { seg: 8, uAbs: false });
         void sa0; void sa1;
         // mirror the angular range for the right leg so the front opening stays at the centre line
         if (s < 0) for (let i = 0; i < P.p.length; i += 3) { P.p[i] = 2 * J[0] - P.p[i]; P.n[i] = -P.n[i]; }
@@ -1175,7 +1195,7 @@ const ACC = {
   chain(c, a) {
     const { B, K, AR } = c, rect = AR.uv('chainGold');
     const parts = [];
-    for (const [drop, rr, n] of [[0.24, 0.016, 15], [0.16, 0.012, 13]]) {
+    for (const [drop, rr, n] of [[0.24, 0.019, 12], [0.16, 0.014, 10]]) {
       const pts = [];
       for (let i = 0; i <= n; i++) {
         const t = i / n, ang = -1.25 + 2.5 * t, y = 1.86 - drop * Math.sin(Math.PI * t) - 0.04;
@@ -1184,7 +1204,7 @@ const ACC = {
       }
       for (let i = 0; i < n; i++) {
         const p = pts[i], q = pts[i + 1];
-        const L = torus(rr, rr * 0.36, 4, 6); const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
+        const L = torus(rr, rr * 0.38, 3, 6); const dx = q[0] - p[0], dy = q[1] - p[1], dz = q[2] - p[2];
         xform(L, mat(0, 0, 0, i % 2 ? Math.PI / 2 : 0, 0, 0, 1.5, 1, 1));
         xform(L, mat((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, 0, Math.atan2(dz, dx) * -1, Math.atan2(dy, Math.hypot(dx, dz))));
         parts.push(L);
@@ -1290,8 +1310,8 @@ function lamePlate(C, s, R, D, a0, a1, th, k = 0) {
 function shellCap(rx, ry, rz, c, th, o = {}) {
   const thetaLength = o.front || o.back ? Math.PI : Math.PI * 0.55;
   const opt = o.front ? { phiStart: 0, phiLength: Math.PI, thetaStart: 0, thetaLength: Math.PI } : o.back ? { phiStart: Math.PI, phiLength: Math.PI, thetaStart: 0, thetaLength: Math.PI } : { thetaLength };
-  const out = ellipsoid(rx, ry, rz, 10, 6, opt);
-  const inn = ellipsoid(rx - th, ry - th, rz - th, 10, 6, opt);
+  const out = ellipsoid(rx, ry, rz, 9, 6, opt);
+  const inn = ellipsoid(rx - th, ry - th, rz - th, 6, 4, opt);
   flipWinding(inn); for (let i = 0; i < inn.n.length; i++) inn.n[i] = -inn.n[i]; aoMul(inn, () => 0.35);
   const P = concat(out, inn);
   if (o.front) xform(P, mat(0, 0, 0, 0, -Math.PI / 2, 0)); // the half faces +z
@@ -1300,4 +1320,7 @@ function shellCap(rx, ry, rz, c, th, o = {}) {
   move(P, c[0], c[1], c[2]);
   return P;
 }
+MASK.respirator.hidesNose = true;
+MASK.balaclava.hidesNose = true; MASK.balaclava.hidesEars = true;
+MASK.balaclava.covers = (th, ph) => { const Y = Math.cos(th); return !(Math.abs(Y - 0.06) < 0.16 && Math.abs(ph) < 0.8); };
 export { ACC, HAT, HAIR, MASK, EYEWEAR, COLLAR };

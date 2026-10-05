@@ -190,6 +190,7 @@ export function ellipsoid(rx, ry, rz, ws = 10, hs = 8, o = {}) {
   g.scale(rx, ry, rz); return fromGeo(g);
 }
 export function rbox(w, h, d, r = 0.01, seg = 1) {
+  if (seg === 0) return fromGeo(new THREE.BoxGeometry(w, h, d)); // tiny parts: plain 12-triangle box
   const g = new THREE.BoxGeometry(1, 1, 1, seg * 2 + 1, seg * 2 + 1, seg * 2 + 1);
   // rounded box: push vertices onto a box with rounded edges (like RoundedBoxGeometry, but with our own normals)
   const pa = g.attributes.position, na = g.attributes.normal, hw = w / 2 - r, hh = h / 2 - r, hd = d / 2 - r;

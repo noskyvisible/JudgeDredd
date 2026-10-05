@@ -53,24 +53,24 @@ const GUNS = {
   // semi-auto pistol: slide with serrations, frame, raked grip, trigger guard, sights
   auto(add) {
     const slide = rbox(0.034, 0.042, 0.2, 0.006, 1); move(slide, 0, 0.074, 0.06); add(slide, 'dark');
-    const port = rbox(0.002, 0.016, 0.04, 0.001, 1); move(port, 0.0175, 0.08, 0.06); add(port, 'steel');
+    const port = rbox(0.002, 0.016, 0.04, 0.001, 0); move(port, 0.0175, 0.08, 0.06); add(port, 'steel');
     const frame = rbox(0.03, 0.026, 0.17, 0.005, 1); move(frame, 0, 0.044, 0.05); add(frame, 'polymer');
     const grip = rbox(0.031, 0.11, 0.048, 0.008, 1); xform(grip, mat(0, -0.008, -0.012, 0.28, 0, 0)); add(grip, 'polymer');
-    const mag = rbox(0.033, 0.014, 0.05, 0.003, 1); xform(mag, mat(0, -0.064, -0.028, 0.28, 0, 0)); add(mag, 'dark');
+    const mag = rbox(0.033, 0.014, 0.05, 0.003, 0); xform(mag, mat(0, -0.064, -0.028, 0.28, 0, 0)); add(mag, 'dark');
     const tg = torus(0.022, 0.0035, 4, 10, Math.PI); xform(tg, mat(0, 0.03, 0.04, 0, Math.PI / 2, Math.PI)); add(tg, 'polymer');
-    const tr = rbox(0.006, 0.02, 0.006, 0.002, 1); xform(tr, mat(0, 0.022, 0.032, -0.3, 0, 0)); add(tr, 'steel');
+    const tr = rbox(0.006, 0.02, 0.006, 0.002, 0); xform(tr, mat(0, 0.022, 0.032, -0.3, 0, 0)); add(tr, 'steel');
     const bar = cylinder(0.0075, 0.0075, 0.02, 8); xform(bar, mat(0, 0.074, 0.165, Math.PI / 2, 0, 0)); add(bar, 'steel');
-    for (const z of [-0.03, 0.15]) { const s = rbox(0.008, 0.008, 0.008, 0.002, 1); move(s, 0, 0.099, z); add(s, 'steel'); }
+    for (const z of [-0.03, 0.15]) { const s = rbox(0.008, 0.008, 0.008, 0.002, 0); move(s, 0, 0.099, z); add(s, 'steel'); }
     return { muzzle: [0, 0.074, 0.18] };
   },
   revolver(add) {
     const bar = cylinder(0.011, 0.011, 0.17, 10); xform(bar, mat(0, 0.072, 0.12, Math.PI / 2, 0, 0)); add(bar, 'steel');
-    const rib = rbox(0.01, 0.012, 0.17, 0.003, 1); move(rib, 0, 0.086, 0.12); add(rib, 'steel');
+    const rib = rbox(0.01, 0.012, 0.17, 0.003, 0); move(rib, 0, 0.086, 0.12); add(rib, 'steel');
     const cyl = cylinder(0.024, 0.024, 0.045, 12); xform(cyl, mat(0, 0.062, 0.015, Math.PI / 2, 0, 0)); add(cyl, 'steel');
     for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, f = cylinder(0.004, 0.004, 0.046, 5); xform(f, mat(Math.cos(a) * 0.024, 0.062 + Math.sin(a) * 0.024, 0.015, Math.PI / 2, 0, 0)); add(f, 'dark'); }
     const frame = rbox(0.026, 0.05, 0.08, 0.006, 1); move(frame, 0, 0.055, 0.0); add(frame, 'dark');
     const grip = rbox(0.03, 0.1, 0.042, 0.012, 1); xform(grip, mat(0, -0.005, -0.03, 0.42, 0, 0)); add(grip, 'wood');
-    const ham = rbox(0.008, 0.02, 0.016, 0.003, 1); xform(ham, mat(0, 0.088, -0.035, -0.5, 0, 0)); add(ham, 'steel');
+    const ham = rbox(0.008, 0.02, 0.016, 0.003, 0); xform(ham, mat(0, 0.088, -0.035, -0.5, 0, 0)); add(ham, 'steel');
     const tg = torus(0.02, 0.0035, 4, 10, Math.PI); xform(tg, mat(0, 0.032, 0.02, 0, Math.PI / 2, Math.PI)); add(tg, 'dark');
     return { muzzle: [0, 0.072, 0.21] };
   },
@@ -80,10 +80,10 @@ const GUNS = {
     for (let i = 0; i < 5; i++) { const h = cylinder(0.015, 0.015, 0.006, 8); xform(h, mat(0, 0.07, 0.17 + i * 0.016, Math.PI / 2, 0, 0)); add(h, 'dark'); }
     const grip = rbox(0.03, 0.09, 0.04, 0.008, 1); xform(grip, mat(0, 0.0, -0.01, 0.2, 0, 0)); add(grip, 'polymer');
     const mag = rbox(0.022, 0.16, 0.03, 0.004, 1); xform(mag, mat(0, -0.02, 0.09, -0.08, 0, 0)); add(mag, 'dark');
-    const stock = rbox(0.012, 0.012, 0.14, 0.003, 1); move(stock, 0, 0.085, -0.12); add(stock, 'steel');
-    const stock2 = rbox(0.012, 0.05, 0.012, 0.003, 1); move(stock2, 0, 0.065, -0.19); add(stock2, 'steel');
+    const stock = rbox(0.012, 0.012, 0.14, 0.003, 0); move(stock, 0, 0.085, -0.12); add(stock, 'steel');
+    const stock2 = rbox(0.012, 0.05, 0.012, 0.003, 0); move(stock2, 0, 0.065, -0.19); add(stock2, 'steel');
     const tg = torus(0.02, 0.0035, 4, 10, Math.PI); xform(tg, mat(0, 0.034, 0.035, 0, Math.PI / 2, Math.PI)); add(tg, 'polymer');
-    const sight = rbox(0.01, 0.016, 0.03, 0.003, 1); move(sight, 0, 0.1, 0.0); add(sight, 'steel');
+    const sight = rbox(0.01, 0.016, 0.03, 0.003, 0); move(sight, 0, 0.1, 0.0); add(sight, 'steel');
     const lamp = cylinder(0.008, 0.008, 0.03, 8); xform(lamp, mat(0.02, 0.06, 0.16, Math.PI / 2, 0, 0)); add(lamp, 'glowStrip');
     return { muzzle: [0, 0.07, 0.25] };
   },
@@ -143,11 +143,11 @@ const MELEE = {
     for (let i = 0; i <= 6; i++) pts.push([0, 0, -0.12 + (len + 0.12) * i / 6]);
     pts.push([0, 0.03, len + 0.04], [0, 0.07, len + 0.045], [0, 0.09, len + 0.02]);
     add(tube(pts, (t) => (t > 0.85 ? 0.012 * (1.2 - t) * 4 : 0.0125), { seg: 6, e: 1.2 }), 'rust');
-    const claw = rbox(0.03, 0.006, 0.04, 0.002, 1); xform(claw, mat(0, -0.004, -0.14, -0.25, 0, 0)); add(claw, 'rust');
+    const claw = rbox(0.03, 0.006, 0.04, 0.002, 0); xform(claw, mat(0, -0.004, -0.14, -0.25, 0, 0)); add(claw, 'rust');
   },
   machete(add, L) {
     add(lathe([[-0.12, 0.018], [-0.11, 0.02], [0.05, 0.017], [0.06, 0.022]], 8), 'leatherGrip');
-    const guard = rbox(0.01, 0.07, 0.012, 0.003, 1); move(guard, 0, 0.0, 0.065); add(guard, 'steel');
+    const guard = rbox(0.01, 0.07, 0.012, 0.003, 0); move(guard, 0, 0.0, 0.065); add(guard, 'steel');
     const bl = piece(); const n = 8, len = 0.52 * L / 0.9;
     for (let i = 0; i <= n; i++) {
       const t = i / n, z = 0.07 + len * t, wTop = 0.006, wide = 0.026 + 0.022 * Math.sin(Math.PI * Math.min(1, t * 1.1)) + (t > 0.8 ? -0.03 * (t - 0.8) / 0.2 : 0);
@@ -165,7 +165,7 @@ const MELEE = {
   wrench(add, L) {
     add(lathe([[-0.13, 0.02], [0.52 * L / 0.9, 0.022]], 8), 'dark');
     const hd = rbox(0.04, 0.09, 0.08, 0.008, 1); move(hd, 0, 0.02, 0.56 * L / 0.9); add(hd, 'steel');
-    const jaw = rbox(0.036, 0.02, 0.05, 0.004, 1); move(jaw, 0, 0.072, 0.58 * L / 0.9); add(jaw, 'steel');
+    const jaw = rbox(0.036, 0.02, 0.05, 0.004, 0); move(jaw, 0, 0.072, 0.58 * L / 0.9); add(jaw, 'steel');
     add(lathe([[-0.11, 0.022], [0.05, 0.022]], 8), 'tape');
   },
   sledge(add, L) {
