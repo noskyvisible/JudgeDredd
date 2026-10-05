@@ -2,7 +2,8 @@
 //   * foot slide: characters locomote at constant speed with the root really moving (set after update(), like the game);
 //     the world position of the planted contact point (heel while heel-rocking / flat, ball while flat / toe-rocking)
 //     must not drift during stance
-//   * sole contact of planted feet and standing stances, measured on the model's real boot vertices (no sinking / floating)
+//   * sole contact of planted feet and standing stances, measured on the model's real boot vertices (no sinking / floating;
+//     reads skinned characters (js/charskin.js) as well as the rigid path: --url http://localhost:8000/?noskin)
 //   * no knee / elbow hyperextension, sane ankles, no NaN — across every clip (and directional variant) at several speeds,
 //     with impulses and look-at targets thrown in
 //   * lying poses end on the floor (core points not under it)
@@ -44,11 +45,26 @@ const res = await page.evaluate(({ quick }) => {
     if (an._bv) return an._bv;
     ch.root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(an.matrixWorld).invert(), rel = new THREE.Matrix4(), pts = [];
-    an.traverse((o) => { if (!o.isMesh || !o.geometry) return; rel.multiplyMatrices(inv, o.matrixWorld); const pa = o.geometry.attributes.position;
+    // meshes still parented under the ankle (rigid path, ?noskin, or meshes the skinning left alone)
+    an.traverse((o) => { if (!o.isMesh || o.isSkinnedMesh || !o.geometry) return; rel.multiplyMatrices(inv, o.matrixWorld); const pa = o.geometry.attributes.position;
       for (let i = 0; i < pa.count; i += 2) pts.push(new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(rel)); });
+    // skinned path (js/charskin.js): every vertex is stored in the local space of its single bone; take the bones at / under the ankle
+    if (ch.skeleton && ch.skinnedMeshes) {
+      const bones = ch.skeleton.bones;
+      for (let b = 0; b < bones.length; b++) {
+        let n = bones[b]; while (n && n !== an) n = n.parent;
+        if (!n) continue;
+        rel.multiplyMatrices(inv, bones[b].matrixWorld);   // bone space -> ankle space
+        for (const sm of ch.skinnedMeshes) {
+          const pa = sm.geometry.attributes.position, si = sm.geometry.attributes.skinIndex;
+          for (let i = 0, k = 0; i < pa.count; i++) if (si.getX(i) === b && (k++ & 1) === 0) pts.push(new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(rel));
+        }
+      }
+    }
     return (an._bv = pts);
   };
-  const soleY = (ch, an) => { const pts = bootVerts(ch, an), M = an.matrixWorld; let m = 1e9; for (const q of pts) { const y = M.elements[1] * q.x + M.elements[5] * q.y + M.elements[9] * q.z + M.elements[13]; if (y < m) m = y; } return m; };
+  const soleY = (ch, an) => { const pts = bootVerts(ch, an), M = an.matrixWorld; let m = 1e9;
+    if (!pts.length) { if (!out.noBoot) { out.noBoot = true; out.problems.push(`${ch.styleName}: no boot vertices found for the sole check`); } return 0; } for (const q of pts) { const y = M.elements[1] * q.x + M.elements[5] * q.y + M.elements[9] * q.z + M.elements[13]; if (y < m) m = y; } return m; };
 
   // ---------------------------------------------------------------- foot slide
   const styles = quick ? ['dredd', 'thug'] : ['dredd', 'thug', 'civ', 'brute', 'junkie', 'boss', 'gunman'];

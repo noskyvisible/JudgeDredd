@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { G } from './state.js';
 import { deg, lerp, smooth, clamp } from './util.js';
 import { buildBody } from './charmodel.js';
+import { skinCharacter } from './charskin.js';
 export { makeLawgiver, makeBaton, makePistol, makeBat } from './props.js';
 
 // ---------------------------------------------------------------------------
@@ -146,6 +147,10 @@ export class Character {
     this._seed = Math.random() * 10;
     this._fo = new Float64Array(6);   // foot spots (x, z, yaw) captured when the current clip started
     this._sleep = false;              // settled on the floor: pose frozen until something happens
+
+    // last: merge the static rig meshes into one SkinnedMesh per material (js/charskin.js): a fraction of the draw calls, identical
+    // result.  After measureRig(), which reads the boot meshes under the ankle joints.
+    skinCharacter(this);
   }
   get phase() { return this.gait.phase; }
   set phase(v) { this.gait.phase = v; }
