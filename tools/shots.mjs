@@ -16,6 +16,8 @@ const quality = +opt('quality', '2');
 const url = opt('url', 'http://localhost:8000/');
 const wantHud = args.includes('--hud');
 const only = opt('shots', '').split(',').filter(Boolean);
+const evalJs = opt('eval', '');          // JS run in the page (T = game test hooks, G = game state) after the setup, before each render: e.g. --eval "T.post.uniforms.uAO.value=0"
+const suffix = opt('suffix', '');
 fs.mkdirSync(out, { recursive: true });
 
 // Each shot: where the player stands (x,z,yaw), what the camera does ('player' = the game camera with yaw/pitch/dist, or 'free' = explicit position + target),
@@ -58,7 +60,7 @@ const names = only.length ? only : Object.keys(SHOTS);
 for (const name of names) {
   const sh = SHOTS[name]; if (!sh) { console.log('unknown shot', name); continue; }
   const t0 = Date.now();
-  const r = await page.evaluate(async (sh) => {
+  const r = await page.evaluate(async ([sh, evalJs]) => {
     const T = window.__test, G = window.__G, P = T.player, THREE = T.THREE;
     // clean slate
     for (const e of G.enemies.all) e.remove(); G.enemies.all.length = 0;
@@ -82,10 +84,11 @@ for (const name of names) {
       c.lookAt(best.x, sh.lookY || 12, best.z); c.updateMatrixWorld(true);
     }
     if (sh.free) { const c = T.camera; c.position.set(...sh.free.pos); c.fov = sh.free.fov || 62; c.updateProjectionMatrix(); c.lookAt(...sh.free.look); c.updateMatrixWorld(true); }
+    if (evalJs) new Function('T', 'G', evalJs)(T, G);
     const info = window.__render();
     return { info, png: T.renderer.domElement.toDataURL('image/png') };
-  }, sh);
-  fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(r.png.split(',')[1], 'base64'));
+  }, [sh, evalJs]);
+  fs.writeFileSync(path.join(out, name + suffix + '.png'), Buffer.from(r.png.split(',')[1], 'base64'));
   console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k`);
 }
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, +process.env.SHOT_ERRN || 8).join('\n') : 'no page errors');

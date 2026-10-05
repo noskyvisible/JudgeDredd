@@ -121,6 +121,90 @@ class BloomStack extends Pass {
   }
 }
 
+// Screen-space ambient occlusion from the scene's resolved depth texture (no extra geometry pass): normals are rebuilt from depth,
+// a spiral of hemisphere samples is tested against the depth buffer at half resolution, then a depth-aware blur removes the noise.
+const AO_FS = `uniform sampler2D tDepth; uniform vec2 res; uniform vec2 proj; uniform mat4 projMat; uniform float near, far, uRadius, uStrength; varying vec2 vUv;
+float viewZ(float d){ return (near * far) / ((far - near) * d - far); }
+vec3 viewPos(vec2 uv, float d){ float z = viewZ(d); return vec3((uv * 2.0 - 1.0) * (-z) / proj, z); }
+float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+void main(){
+  float d0 = texture2D(tDepth, vUv).r;
+  if (d0 >= 0.99999) { gl_FragColor = vec4(1.0); return; }
+  vec2 px = 1.0 / res;
+  vec3 P = viewPos(vUv, d0);
+  if (-P.z > 90.0) { gl_FragColor = vec4(1.0); return; }
+  vec3 Pr = viewPos(vUv + vec2(px.x, 0.0), texture2D(tDepth, vUv + vec2(px.x, 0.0)).r), Pl = viewPos(vUv - vec2(px.x, 0.0), texture2D(tDepth, vUv - vec2(px.x, 0.0)).r);
+  vec3 Pu = viewPos(vUv + vec2(0.0, px.y), texture2D(tDepth, vUv + vec2(0.0, px.y)).r), Pd = viewPos(vUv - vec2(0.0, px.y), texture2D(tDepth, vUv - vec2(0.0, px.y)).r);
+  vec3 dx = abs(Pr.z - P.z) < abs(P.z - Pl.z) ? Pr - P : P - Pl;
+  vec3 dy = abs(Pu.z - P.z) < abs(P.z - Pd.z) ? Pu - P : P - Pd;
+  vec3 N = normalize(cross(dx, dy)); if (N.z < 0.0) N = -N;
+  vec3 T = normalize(abs(N.y) < 0.99 ? cross(N, vec3(0.0, 1.0, 0.0)) : cross(N, vec3(1.0, 0.0, 0.0))); vec3 B = cross(N, T);
+  float rot = ign(gl_FragCoord.xy) * 6.2831853;
+  float occ = 0.0;
+  for (int i = 0; i < SAMPLES; i++) {
+    float fi = (float(i) + 0.5) / float(SAMPLES);
+    float a = rot + float(i) * 2.399963;
+    float r = sqrt(fi);
+    vec3 sd = T * (cos(a) * r) + B * (sin(a) * r) + N * sqrt(max(0.0, 1.0 - fi));
+    vec3 S = P + sd * uRadius * mix(0.12, 1.0, fi * fi);
+    vec4 sp = projMat * vec4(S, 1.0);
+    vec2 suv = sp.xy / sp.w * 0.5 + 0.5;
+    float sz = viewZ(texture2D(tDepth, suv).r);
+    float range = smoothstep(0.0, 1.0, uRadius / max(abs(P.z - sz), 1e-3));
+    occ += (sz >= S.z + 0.04 + 0.01 * (-P.z) ? 1.0 : 0.0) * range;
+  }
+  float ao = 1.0 - clamp(occ / float(SAMPLES) * uStrength, 0.0, 1.0);
+  ao = mix(ao, 1.0, smoothstep(55.0, 90.0, -P.z));
+  gl_FragColor = vec4(vec3(ao), 1.0);
+}`;
+const AO_BLUR_FS = `uniform sampler2D tAO; uniform sampler2D tDepth; uniform vec2 texel; uniform vec2 dir; uniform float near, far; varying vec2 vUv;
+float viewZ(float d){ return (near * far) / ((far - near) * d - far); }
+void main(){
+  float zc = viewZ(texture2D(tDepth, vUv).r);
+  float acc = 0.0, ws = 0.0;
+  for (int i = -3; i <= 3; i++) {
+    vec2 uv = vUv + dir * texel * float(i);
+    float z = viewZ(texture2D(tDepth, uv).r);
+    float w = exp(-float(i * i) / 6.0) * exp(-abs(z - zc) * 1.6 / max(1.0, -zc * 0.15));
+    acc += texture2D(tAO, uv).r * w; ws += w;
+  }
+  gl_FragColor = vec4(vec3(acc / ws), 1.0);
+}`;
+class SSAOPass extends Pass {
+  constructor(camera, w, h) {
+    super();
+    this.needsSwap = false; this.camera = camera; this.radius = 1.7; this.strength = 2.6; this.samples = 10;
+    this.quad = new FullScreenQuad(null);
+    const o = { type: THREE.UnsignedByteType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false };
+    this.rt = [new THREE.WebGLRenderTarget(2, 2, o), new THREE.WebGLRenderTarget(2, 2, o)];
+    this.make();
+    this.white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat); this.white.needsUpdate = true;
+    this.setSize(w, h);
+  }
+  make() {
+    const common = { tDepth: { value: null }, near: { value: 0.1 }, far: { value: 1000 } };
+    this.aoMat = mkMat(AO_FS, { ...common, res: { value: new THREE.Vector2() }, proj: { value: new THREE.Vector2(1, 1) }, projMat: { value: new THREE.Matrix4() }, uRadius: { value: this.radius }, uStrength: { value: this.strength } });
+    this.aoMat.defines = { SAMPLES: this.samples };
+    this.blurMat = mkMat(AO_BLUR_FS, { ...common, tAO: { value: null }, texel: { value: new THREE.Vector2() }, dir: { value: new THREE.Vector2() } });
+  }
+  setSamples(n) { if (n !== this.samples) { this.samples = n; this.aoMat.defines = { SAMPLES: n }; this.aoMat.needsUpdate = true; } }
+  get aoTex() { return this.enabled ? this.rt[0].texture : this.white; }
+  setSize(w, h) { this.w = Math.max(2, Math.floor(w / 2)); this.h = Math.max(2, Math.floor(h / 2)); for (const r of this.rt) r.setSize(this.w, this.h); }
+  render(renderer, writeBuffer, readBuffer) {
+    const depth = readBuffer.depthTexture; if (!depth) return;
+    const c = this.camera, pm = c.projectionMatrix, am = this.aoMat.uniforms, bm = this.blurMat.uniforms, prev = renderer.getRenderTarget();
+    am.tDepth.value = depth; am.res.value.set(this.w, this.h); am.proj.value.set(pm.elements[0], pm.elements[5]); am.projMat.value.copy(pm);
+    am.near.value = c.near; am.far.value = c.far; am.uRadius.value = this.radius; am.uStrength.value = this.strength;
+    this.quad.material = this.aoMat; renderer.setRenderTarget(this.rt[1]); this.quad.render(renderer);
+    bm.tDepth.value = depth; bm.near.value = c.near; bm.far.value = c.far; bm.texel.value.set(1 / this.w, 1 / this.h);
+    bm.tAO.value = this.rt[1].texture; bm.dir.value.set(1, 0); this.quad.material = this.blurMat; renderer.setRenderTarget(this.rt[0]); this.quad.render(renderer);
+    bm.tAO.value = this.rt[0].texture; bm.dir.value.set(0, 1); renderer.setRenderTarget(this.rt[1]); this.quad.render(renderer);
+    // result lives in rt[1]; expose it as rt[0] for the final pass by swapping
+    const t = this.rt[0]; this.rt[0] = this.rt[1]; this.rt[1] = t;
+    renderer.setRenderTarget(prev);
+  }
+}
+
 // scrub NaN / Inf / absurd HDR values before bloom: one bad pixel would otherwise be blurred across the whole screen (black frame)
 const SCRUB = {
   uniforms: { tDiffuse: { value: null } },
@@ -130,7 +214,7 @@ const SCRUB = {
 
 const FINAL = {
   uniforms: {
-    tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null },
+    tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null }, tAO: { value: null }, uAO: { value: 1 }, uDbg: { value: 0 },
     time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) },
     uBloom: { value: 0.55 }, uStreak: { value: 0.5 }, uExposure: { value: 1.12 },
     aber: { value: 0.0006 }, vig: { value: 0.42 }, grain: { value: 0.025 }, speed: { value: 0 }, sharpen: { value: 0.3 },
@@ -138,7 +222,7 @@ const FINAL = {
     shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
   },
   vertexShader: VERT,
-  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO; uniform float uAO, uDbg; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
     vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -154,7 +238,8 @@ const FINAL = {
       return mix(t, hp, 0.5);
     }
     vec3 encode(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
-    vec3 hdr(vec2 uv) { return texture2D(tDiffuse, uv).rgb; }
+    // AO darkens ambient light only: bright (emissive) pixels are exempt so neon never gets dirty halos
+    vec3 hdr(vec2 uv) { vec3 c = texture2D(tDiffuse, uv).rgb; float ao = texture2D(tAO, uv).r; return c * mix(1.0, ao, uAO * (1.0 - smoothstep(0.8, 2.6, luma(c)))); }
     void main(){
       vec2 uv = vUv; float aspect = res.x / res.y;
       // expanding shockwave rings bend the image
@@ -167,6 +252,7 @@ const FINAL = {
           uv -= dir * ring * s.w * 0.05;
         }
       }
+      if (uDbg > 0.5) { gl_FragColor = vec4(vec3(texture2D(tAO, vUv).r), 1.0); return; }   // debug view: raw AO buffer
       vec2 c = uv - 0.5; float d2 = dot(c, c);
       vec3 col;
       if (speed > 0.01) { // radial speed blur
@@ -203,29 +289,32 @@ const FINAL = {
 };
 
 export function createPost(renderer, scene, camera, W, H, PR) {
-  const rt = new THREE.WebGLRenderTarget(W * PR, H * PR, { type: THREE.HalfFloatType, samples: 4 });
+  const rt = new THREE.WebGLRenderTarget(W * PR, H * PR, { type: THREE.HalfFloatType, samples: 4, depthTexture: new THREE.DepthTexture(W * PR, H * PR) });
   const composer = new EffectComposer(renderer, rt);
   composer.setPixelRatio(PR);
   composer.addPass(new RenderPass(scene, camera));
+  const ssao = new SSAOPass(camera, W * PR, H * PR);
+  composer.addPass(ssao);
   composer.addPass(new ShaderPass(SCRUB));
   const bloom = new BloomStack(W * PR, H * PR);
   composer.addPass(bloom);
   const post = new ShaderPass(FINAL);
   composer.addPass(post);
   const U = post.uniforms;
-  const sync = () => { U.tBloom.value = bloom.bloomTex; U.tStreak.value = bloom.streakTex; };
+  const sync = () => { U.tBloom.value = bloom.bloomTex; U.tStreak.value = bloom.streakTex; U.tAO.value = ssao.aoTex; };
   const origRender = post.render.bind(post);
   post.render = (r, wb, rb, dt, mask) => { sync(); origRender(r, wb, rb, dt, mask); };
   return {
-    composer, post, bloom, uniforms: U,
+    composer, post, bloom, ssao, uniforms: U,
     setSize(w, h, pr) {
       composer.setPixelRatio(pr); composer.setSize(w, h);
       const dw = Math.floor(w * pr), dh = Math.floor(h * pr);
-      bloom.setSize(dw, dh); U.res.value.set(dw, dh);
+      bloom.setSize(dw, dh); ssao.setSize(dw, dh); U.res.value.set(dw, dh);
     },
     setQuality(Q) {
       bloom.enabled = Q.bloom; bloom.streakOn = !!Q.streaks;
       U.uBloom.value = Q.bloom ? 0.55 : 0; U.uStreak.value = Q.streaks ? 0.5 : 0;
+      ssao.enabled = !!Q.ao; if (Q.ao) ssao.setSamples(Q.ao);
     },
   };
 }

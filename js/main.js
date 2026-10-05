@@ -17,7 +17,7 @@ import { Player } from './player.js';
 import { Character, STYLES, CLIPS, makeLawgiver, makeBaton, makePistol, makeBat } from './character.js';
 import { Lawmaster, ridePose } from './bike.js';
 import { hud, judgement } from './ui.js';
-import { clamp, damp, rand } from './util.js';
+import { clamp, damp, rand, mulberry32 } from './util.js';
 
 installHeightFog();
 const canvas = document.getElementById('game');
@@ -39,9 +39,9 @@ const { composer, post } = P;
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [
-  { name: 'LOW', pr: 0.75, shadows: false, bloom: false, streaks: false, refl: 0 },
-  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true, streaks: false, refl: 0.4 },
-  { name: 'HIGH', pr: PR, shadows: true, bloom: true, streaks: true, refl: 0.55 },
+  { name: 'LOW', pr: 0.75, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
+  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
+  { name: 'HIGH', pr: PR, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
 ];
 G.quality = 2; if (navigator.webdriver) G.autoQ = true;
 function setQuality(q, announce) {
@@ -54,7 +54,8 @@ function setQuality(q, announce) {
 
 // ---------------------------------------------------------------- world & systems
 fx.init(scene);
-world.build(scene, renderer);
+// the city layout must be the same every time: world generation mixes seeded and Math.random-based helpers, so pin Math.random while it builds
+{ const realRandom = Math.random; Math.random = mulberry32(19771977); try { world.build(scene, renderer); } finally { Math.random = realRandom; } }
 reflection.hide.push(...(world.mirrorHide || []));
 setQuality(G.quality);
 fx.setScale(innerHeight * PR);
