@@ -10,7 +10,7 @@ import * as THREE from 'three';
 // ---------------------------------------------------------------------------
 
 const PLANE_Y = 0;
-const FAR_DYN = 45;       // metres: dynamic Groups beyond this are left out of the mirror pass
+const FAR_DYN = 32;       // metres: dynamic Groups beyond this are left out of the mirror pass
 const _p = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
 
 export class GroundReflection {

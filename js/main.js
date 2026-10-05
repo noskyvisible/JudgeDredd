@@ -7,6 +7,8 @@ import { eagleShape } from './world.js';
 import { buildStreetProps, updateStreetProps, streetPropStreams } from './streetprops.js';
 import { buildMonorail } from './monorail.js';
 import { buildHallStatues } from './hallstatues.js';
+import { createFlyers } from './flyers.js';
+import { updateDynamicLOD } from './lod.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -40,18 +42,21 @@ scene.add(camera); camera.layers.enable(1);   // layer 1 = ground meshes (hidden
 // ---------------------------------------------------------------- post (js/post.js: bloom pyramid + streaks, filmic tone map, grade)
 const P = createPost(renderer, scene, camera, innerWidth, innerHeight, PR);
 const { composer, post } = P;
+G.gradeTint = post.uniforms.uTint;
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [
-  { name: 'LOW', pr: 0.75, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
-  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
-  { name: 'HIGH', pr: PR, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
+  { name: 'LOW', pr: 0.75, px: 1.2e6, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
+  { name: 'MEDIUM', pr: 1.0, px: 2.2e6, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
+  { name: 'HIGH', pr: Math.min(PR, 1.25), px: 3.0e6, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
 ];
 G.quality = 2; if (navigator.webdriver) G.autoQ = true;
+// internal resolution = the tier's pixel ratio, capped by a pixel budget so a 4K / 1440p window does not push 8M pixels through the heavier passes
+const prFor = (q) => Math.min(QUALITY[q].pr, Math.sqrt(QUALITY[q].px / Math.max(1, innerWidth * innerHeight)));
 function setQuality(q, announce) {
-  G.quality = q; const Q = QUALITY[q];
-  renderer.setPixelRatio(Q.pr); P.setSize(innerWidth, innerHeight, Q.pr); P.setQuality(Q);
-  world.sun.castShadow = Q.shadows; fx.setScale(innerHeight * Q.pr);
+  G.quality = q; const Q = QUALITY[q], pr = prFor(q);
+  renderer.setPixelRatio(pr); P.setSize(innerWidth, innerHeight, pr); P.setQuality(Q);
+  world.sun.castShadow = Q.shadows; fx.setScale(innerHeight * pr);
   reflection.setEnabled(Q.refl > 0, Q.refl);
   if (announce) hud.feed(`GRAPHICS: ${Q.name}`, 'good');
 }
@@ -64,6 +69,7 @@ reflection.hide.push(...(world.mirrorHide || []));
 buildStreetProps(scene);
 const monorail = buildMonorail(scene);
 buildHallStatues(scene);
+const flyers = createFlyers(scene);
 setQuality(G.quality);
 fx.setScale(innerHeight * PR);
 
@@ -160,7 +166,7 @@ G.voiceOn = true;
 
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h); P.setSize(w, h, QUALITY[G.quality].pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
+  const pr = prFor(G.quality); renderer.setPixelRatio(pr); renderer.setSize(w, h); P.setSize(w, h, pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * pr);
 }
 addEventListener('resize', resize);
 
@@ -193,7 +199,7 @@ function simulate(dt) {
     }
     G.enemies.update(gdt); G.civs.update(gdt); G.traffic.update(gdt); G.pickups.update(gdt); G.crimes.update(gdt); weapons.update(gdt);
   }
-  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt);
+  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt); flyers.update(G.modal ? 0 : dt, player.pos); updateDynamicLOD(dt, camera, player.pos);
   fx.update(dt, gdt);
   const b = G.mode === 'bike' ? bike : null;
   const sp01 = b ? clamp((Math.abs(b.speed) - 40) / 70, 0, 1) : 0;
@@ -215,9 +221,11 @@ function simulate(dt) {
 function renderFrame() {
   renderer.info.reset();
   const mirrored = reflection.render(renderer, scene, camera);
+  const first = renderer.info.render.calls, firstTris = renderer.info.render.triangles;      // mirror pass (+ the shadow map it refreshes)
   if (mirrored) renderer.shadowMap.autoUpdate = false;
   composer.render();
   renderer.shadowMap.autoUpdate = true;
+  G.passInfo = { mirrorShadowCalls: first, mirrorShadowTris: firstTris, totalCalls: renderer.info.render.calls, totalTris: renderer.info.render.triangles };
 }
 // ---------------------------------------------------------------- cinematic title: the camera glides through the Hall plaza while the city lives behind the logo
 const TITLE_SHOTS = [   // all on open road / plaza so the camera never meets a building
@@ -241,7 +249,7 @@ function updateTitle(dt) {
   post.uniforms.uFade.value = Math.max(0, Math.min(fadeIn, fadeOut));
   if (T.t >= S.d) { T.i = (T.i + 1) % TITLE_SHOTS.length; T.t = 0; }
   player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
-  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); fx.update(dt, dt);
+  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); flyers.update(dt, camera.position); updateDynamicLOD(dt, camera, camera.position); fx.update(dt, dt);
   post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
   const Ut = post.uniforms; Ut.uDof.value = QUALITY[G.quality].ao ? 0.8 : 0; Ut.uFocus.value = camera.position.distanceTo(_tl) * 0.95;
 }
@@ -272,8 +280,8 @@ document.getElementById('boot').style.display = 'none';
 requestAnimationFrame(frame);
 
 // debug / test hooks
-window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
+window.__flyers = flyers; window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
-window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };
+Object.assign(window.__test, { reflection, renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
+window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles, pass: G.passInfo }; };

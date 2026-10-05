@@ -48,10 +48,34 @@ export const SHOTS = {
   rail:        { at: [250, 262, 0], free: { pos: [118, 4.5, 262], look: [210, 17, 250], fov: 62 }, settle: 30, setup: 'rail' },
   rail_view:   { at: [250, 280, 0], free: { pos: [214, 3.2, 281], look: [250, 16.5, 252], fov: 60 }, settle: 30, setup: 'rail' },
   judge:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 40, setup: 'judge' },
+  sky_moon:    { at: [0, 100, Math.PI], free: { pos: [10, 3, 56], look: [-40, 70, -60], fov: 70 }, settle: 20 },
+  air_war: { at: [-452, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_fin: { at: [52, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_neonrow: { at: [452, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_alley: { at: [-452, 20, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_park: { at: [452, 20, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_ind: { at: [-452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_market: { at: [52, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_docks: { at: [452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  volley:      { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 6 },
+  volley2:     { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 14 },
+  fight6:      { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 120, setup: 'foe6' },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
   night_ride:  { at: [400, -450, 0], cam: { yaw: 0.0, pitch: 0.15, dist: 7.5 }, settle: 150, setup: 'ride' },
+  // vehicle close-ups (Lawmaster parked with Dredd aboard on the neon street; boost run; traffic showroom along the kerb)
+  bike_side:   { at: [450.2, -498, 0], free: { pos: [454.4, 1.25, -497.2], look: [452, 1.0, -497.8], fov: 46 }, settle: 90, setup: 'ride_stop' },
+  bike_front:  { at: [450.2, -498, 0], free: { pos: [453.4, 1.3, -492.4], look: [452, 1.05, -497.6], fov: 46 }, settle: 90, setup: 'ride_stop' },
+  bike_rear:   { at: [450.2, -498, 0], free: { pos: [451.0, 1.95, -504.4], look: [452, 1.0, -498], fov: 55 }, settle: 90, setup: 'ride_stop' },
+  bike_boost:  { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.1, dist: 6.5 }, settle: 150, setup: 'boost' },
+  cars:        { at: [447, -548, 0], free: { pos: [449.6, 2.3, -547], look: [457.5, 0.9, -522], fov: 52 }, settle: 30, setup: 'cars' },
+  cars_front:  { at: [447, -548, 0], free: { pos: [452.2, 1.7, -481], look: [457.6, 1.0, -503], fov: 55 }, settle: 30, setup: 'cars' },
+  traffic:     { at: [470, -540, 0], free: { pos: [462, 1.6, -520], look: [448, 1.0, -495], fov: 60 }, settle: 75, setup: 'traffic' },
+  ride_fast:   { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.16, dist: 7.5 }, settle: 150, setup: 'ride_w' },
+  flyers:      { at: [468, -575, 0], free: { pos: [446, 1.7, -560], look: [450, 24, -470], fov: 64 }, settle: 120, setup: 'flyers' },
+  boost_close: { at: [-300, 50, Math.PI / 2], free: { rel: true, pos: [-2.6, 1.3, -4.2], look: [0, 0.8, -1.2], fov: 58 }, settle: 100, setup: 'boost' },
+  bike_park:   { at: [450.2, -498, 0], free: { pos: [455.6, 1.5, -495.4], look: [451.6, 0.85, -498.2], fov: 46 }, settle: 90, setup: 'park' },
 };
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--mute-audio'] });
@@ -59,7 +83,7 @@ const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message.split('\n')[0]));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text().slice(0, +process.env.SHOT_ERRLEN || 200)); });
-await page.addInitScript((tm) => { window.__noRender = true; window.__titleMode = tm; }, (opt('shots', '')).startsWith('title'));
+await page.addInitScript(([tm, ch]) => { window.__noRender = true; window.__titleMode = tm; if (ch) globalThis.__CHUNK = ch; }, [(opt('shots', '')).startsWith('title'), +opt('chunk', '0')]);   // --chunk <metres>: override the world's static-geometry chunk size (perf experiments)
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 await page.evaluate(([q, hud]) => {
@@ -87,9 +111,36 @@ for (const name of names) {
     if (sh.setup === 'foe') {
       for (const [dx, dz, t] of [[3.2, -2.6, 'thug'], [-3.4, -3.8, 'gunman'], [0.6, -6.5, 'brute']]) { const e = new T.Enemy(t, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
     }
+    if (sh.setup === 'foe6') {   // the worst case: six hostiles in the frame
+      for (const [dx, dz, ty] of [[3.2, 2.6, 'thug'], [-3.4, 3.8, 'gunman'], [0.6, 6.5, 'brute'], [5, 8, 'thug'], [-6, 9, 'gunman'], [2, 12, 'junkie']]) { const e = new T.Enemy(ty, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
+    }
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
+    if (sh.setup === 'ride_stop') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 0; T.bike.sirenOn = true; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
+    if (sh.setup === 'ride_w') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); }
+    if (sh.setup === 'park') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); T.bike.speed = 0; T.bike.sirenOn = false; T.bike.called = false; T.bike.ctrl.hold = true; P.pos.set(T.bike.pos.x - 1.3, 0, T.bike.pos.z + 2.4); P.yaw = 2.6; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
+    if (sh.setup === 'boost') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 70; T.bike.boostE = 1; }
+    if (sh.setup === 'flyers') {   // js/flyers.js is not wired into main.js; instantiate it here for the still
+      if (!window.__flyers) { const F = await import('/js/flyers.js'); window.__flyers = F.createFlyers(G.scene, { count: 32 }); }
+    }
+    if (sh.setup === 'traffic') {   // a stream of traffic in both directions along the x=450 street
+      const pol = G.traffic.cars.find((c) => c.kind === 'police'); const cs = G.traffic.cars.filter((c) => c !== pol).slice(0, 9); if (pol) { pol.lightsOn = true; cs.splice(2, 0, pol); }
+      cs.forEach((c, i) => { const north = i % 2 === 0; c.dead = false; c.model.visible = true; c.yaw = north ? 0 : Math.PI; c.pos.set(450 + (north ? -5 : 5), 0, -520 - 10 + Math.floor(i / 2) * 15 + (north ? 0 : 8)); c.speed = c.maxSpeed = 9; c.vx = 0; c.vz = 0; c.extendPath(); });
+    }
+    if (sh.setup === 'cars') {
+      const CM = await import('/js/carmodel.js');
+      for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - 455, c.pos.z - (P.pos.z + 20)) < 80) c.pos.x += 3000;
+      (window.__showroom || []).forEach((m) => m.removeFromParent());
+      let z = P.pos.z + 6; window.__showroom = CM.CAR_TYPES.map((k) => { const m = CM.makeCarModel(k, CM.carPaint(k)); z += m.userData.len / 2; m.position.set(458.2, 0, z); z += m.userData.len / 2 + 1.4; G.scene.add(m); return m; });
+    }
     // settle: let lights hop, traffic spawn, the camera catch up
-    for (let i = 0; i < sh.settle; i++) { if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; } window.__step(1); }
+    T.world.updateAir(P.pos, 1);   // snap the district atmosphere (fog / sky / grade) to where we stand instead of drifting there
+    for (let i = 0; i < sh.settle; i++) {
+      if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; }
+      if (sh.setup === 'ride_w') T.input.setKey('KeyW', i < sh.settle - 1);
+      if (window.__flyers) window.__flyers.update(1 / 60, P.pos);
+      if (sh.setup === 'boost') { T.input.setKey('KeyW', i < sh.settle - 1); T.input.setKey('ShiftLeft', i < sh.settle - 1); T.bike.boostE = 1; }
+      window.__step(1);
+    }
     if (sh.setup === 'boom') { // a Hi-Ex style explosion ahead of Dredd plus a muzzle flash and some sparks, rendered mid-burst
       const f = T.fx, at = new THREE.Vector3(P.pos.x + 1.5, 0, P.pos.z - 11);
       f.explosion(at.clone().setY(1.2), 2.4); f.shake(0); T.weapons.firePatches.push({ pos: at.clone().add(new THREE.Vector3(4, 0, 2)), r: 3, t: 9, tick: 0, owner: null });
@@ -110,6 +161,16 @@ for (const name of names) {
       for (let i = 0; i < 20; i++) window.__step(1);
       G.judgement.open(e); G.judgement.select(4);
       T.post.uniforms.uDof.value = 0.9; T.post.uniforms.uFocus.value = 4;
+    }
+    if (sh.setup === 'volley') {   // one of every round type fired side by side down the street, caught mid-flight from just behind
+      const A = [0, 1, 2, 4, 5], base = new THREE.Vector3(P.pos.x, 1.45, P.pos.z + 1.0);
+      for (let i = 0; i < A.length; i++) {
+        const from = base.clone().add(new THREE.Vector3((i - 2) * 0.9, 0, 0));
+        T.weapons.fire('player', from, new THREE.Vector3(0, 0.001, 1), A[i], { spread: 0 });
+        T.fx.muzzle(from, new THREE.Vector3(0, 0, 1), 0xffd070);
+      }
+      for (let k = 0; k < (sh.flight || 9); k++) window.__step(1);
+      const c = T.camera; c.position.set(P.pos.x + 3.4, 1.35, P.pos.z - 2.2); c.fov = 54; c.updateProjectionMatrix(); c.lookAt(P.pos.x - 1.2, 1.4, P.pos.z + 18); c.updateMatrixWorld(true);
     }
     if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
       T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);
@@ -149,7 +210,11 @@ for (const name of names) {
       const c = T.camera; c.position.set(best.x + best.nx * d + px * 3, 3.2, best.z + best.nz * d + pz * 3); c.fov = sh.fov || 55; c.updateProjectionMatrix();
       c.lookAt(best.x, sh.lookY || 12, best.z); c.updateMatrixWorld(true);
     }
-    if (sh.free) { const c = T.camera; c.position.set(...sh.free.pos); c.fov = sh.free.fov || 62; c.updateProjectionMatrix(); c.lookAt(...sh.free.look); c.updateMatrixWorld(true); }
+    if (sh.free && sh.free.rel) {   // camera relative to the bike (x right, y up, z forward in bike space)
+      const b = T.bike, f = new THREE.Vector3(Math.sin(b.yaw), 0, Math.cos(b.yaw)), r = new THREE.Vector3(-f.z, 0, f.x);
+      const at = (v) => b.pos.clone().addScaledVector(r, v[0]).add(new THREE.Vector3(0, v[1], 0)).addScaledVector(f, v[2]);
+      const c = T.camera; c.position.copy(at(sh.free.pos)); c.fov = sh.free.fov || 62; c.updateProjectionMatrix(); c.lookAt(at(sh.free.look)); c.updateMatrixWorld(true);
+    } else if (sh.free) { const c = T.camera; c.position.set(...sh.free.pos); c.fov = sh.free.fov || 62; c.updateProjectionMatrix(); c.lookAt(...sh.free.look); c.updateMatrixWorld(true); }
     if (evalJs) new Function('T', 'G', evalJs)(T, G);
     const info = window.__render();
     const cp = T.camera.position;
@@ -157,7 +222,7 @@ for (const name of names) {
   }, [sh, evalJs]);
   if (pageShot) await page.screenshot({ path: path.join(out, name + suffix + '.png'), timeout: 120000 });
   else fs.writeFileSync(path.join(out, name + suffix + '.png'), Buffer.from(r.png.split(',')[1], 'base64'));
-  console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k  cam ${r.cam.join(',')}`);
+  console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k  [mirror+shadow ${r.info.pass.mirrorShadowCalls} calls / ${(r.info.pass.mirrorShadowTris / 1000).toFixed(0)}k]  cam ${r.cam.join(',')}`);
 }
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, +process.env.SHOT_ERRN || 8).join('\n') : 'no page errors');
 await browser.close();
