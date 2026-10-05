@@ -11,8 +11,10 @@
 //     --zoom 1.0                    camera distance multiplier (<1 closer);  --focus 0.55  height (0 feet .. 1 head) the camera looks at
 //     --cycle walk:<m/s>:<n>        n frames across one walk/run cycle (columns), side view, on a treadmill (run:<m/s>:<n> works too)
 //     --seq <kind>:<m/s>:<n>:<sec>  n frames over <sec> seconds of a moving-root sequence, camera tracking from the side:
-//                                   start (idle -> moving), stop (moving -> idle), turn (180 at speed), strafe, shove (knockback), pivot (turn on the spot)
+//                                   start (idle -> moving), stop (moving -> idle), turn (180 at speed), strafe, shove (knockback), pivot (turn on the spot),
+//                                   dodge (the player's dodge roll)
 //     --span <sec>                  for frames:<clip>:<n>: render this many seconds instead of the clip length (see the settle / hold)
+//     --then <clip>:<sec>           for frames: play a second clip <sec> seconds in (e.g. knockdown then getup)
 //     --url http://localhost:8000/  game server (python3 -m http.server)
 //   Examples:
 //     node tools/studio.mjs hero.png --chars dredd --angles front,back,left,right,q34,top --zoom 0.8
@@ -39,6 +41,7 @@ const seq = opt('seq', '');
 const dirName = opt('dir', '');
 const stance = opt('stance', '');
 const span = +opt('span', '0');
+const then = opt('then', '');
 const [TW, TH] = opt('tile', '300x420').split('x').map(Number);
 const zoom = +opt('zoom', '1'), focus = +opt('focus', '0.52');
 const url = opt('url', 'http://localhost:8000/');
@@ -52,7 +55,7 @@ await page.addInitScript(() => { window.__noRender = true; });
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 
-const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, TW, TH, zoom, focus }) => {
+const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, TW, TH, zoom, focus }) => {
   const T = window.__test, THREE = T.THREE, R = T.renderer;
   const studio = new THREE.Scene();
   studio.background = new THREE.Color(0x15121d);
@@ -118,6 +121,11 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
       else if (kind === 'pivot') { want = 0; if (k > 0.15) yawTo = Math.PI * 0.75; }
       else if (kind === 'strafe') { want = v; side = true; }
       else if (kind === 'shove') { want = 0; if (S.t < dt * 1.5 && S.t >= 0) { S.vel.set(0, 0, -7); ch.impulse([0, 0, -1], 1.2); ch.play('hurt', { speed: 1.3, dir: new THREE.Vector3(0, 0, -1) }); } }
+      else if (kind === 'dodge') {   // mirrors Player.startDodge / the 'dodge' state
+        if (S.dk === undefined && S.t >= 0.1) { S.dk = 0; ch.play('dodge', { speed: 1 }); }
+        if (S.dk !== undefined && S.dk < 1) { S.dk = Math.min(1, S.dk + dt / 0.5); const sp = 15 * (1 - S.dk * 0.6); S.vel.set(Math.sin(S.yaw) * sp, 0, Math.cos(S.yaw) * sp); ch.roll = S.dk * Math.PI * 2; if (S.dk >= 1) { ch.roll = 0; ch.stopClip(); S.vel.set(0, 0, 0); } }
+        ch.speed = 0; ch.update(dt); S.pos.addScaledVector(S.vel, dt); ch.root.position.copy(S.pos); S.t += dt; return;
+      }
       S.yaw += Math.atan2(Math.sin(yawTo - S.yaw), Math.cos(yawTo - S.yaw)) * (1 - Math.exp(-10 * dt));
       const fx = side ? Math.cos(S.yaw) : Math.sin(S.yaw), fz = side ? -Math.sin(S.yaw) : Math.cos(S.yaw);
       if (kind !== 'shove') { S.vel.x += (fx * want - S.vel.x) * (1 - Math.exp(-12 * dt)); S.vel.z += (fz * want - S.vel.z) * (1 - Math.exp(-12 * dt)); }
@@ -150,8 +158,11 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
         ang = angleGiven ? angDeg[angles[0]] ?? 90 : 90; aName = angleGiven ? angles[0] : 'side';
       } else if (parts) {
         const name = parts[1]; const n = cols; const dur = span > 0 ? span : T.CLIPS[name].dur;
-        if (c === 0) { ch.treadmill = true; settle(ch, 30); ch.play(name, { speed: 1, dir }); }
-        else step(ch, dur / (n - 1));
+        if (c === 0) { ch.treadmill = true; settle(ch, 30); ch.play(name, { speed: 1, dir }); ch._st = 0; ch._thenDone = false; }
+        else {
+          const [tn, tt] = then ? then.split(':') : [null, 0];
+          step(ch, dur / (n - 1), (st) => { ch._st += st; if (tn && !ch._thenDone && ch._st >= +tt) { ch._thenDone = true; ch.play(tn, { speed: 1, dir }); } });
+        }
         ang = angDeg[angles[0]] ?? 35; aName = angles[0];
       } else { applyPose(ch, pose); aName = angles[c]; ang = angDeg[aName] ?? 0; }
       const a = ang * Math.PI / 180, d = H * 3.1 * zoom, top = aName === 'top';
@@ -168,7 +179,7 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
     studio.remove(ch.root);
   }
   return { png: sheet.toDataURL('image/png'), info };
-}, { chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, TW, TH, zoom, focus });
+}, { chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, TW, TH, zoom, focus });
 fs.writeFileSync(out, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(res.info.join('\n'));
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 6).join('\n') : 'wrote ' + out);

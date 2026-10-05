@@ -20,6 +20,8 @@ import { Gait, PERSONA, STANCE } from './animloco.js';
 export { CLIPS };
 
 const _mH = new Float64Array(9), _mA = new Float64Array(9), _mB = new Float64Array(9), _mK = new Float64Array(9), _mF = new Float64Array(9);
+const _M = [0, 1, 2, 3, 4, 5, 6, 7].map(() => new THREE.Matrix4()), _Mi = new THREE.Matrix4();
+const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _p4 = new THREE.Vector3();
 const smooth01 = (t) => { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); };
 const LIN = (i) => i >= 3 && i < 6;   // flat-buffer indices of the 'pos' channel (distances, never wrapped)
 
@@ -138,8 +140,9 @@ export class Character {
     this._linger = null; this._lingerT = 0;
     this._fid = null; this._fidT = 0; this._fidNext = 2 + Math.random() * 6;
     this._impact = false; this._nan = 0;
-    this._dispRoll = 0; this._pivY = 0.9; this._cY = 0.9;
+    this._dispRoll = 0; this._pivY = 0.9; this._cY = 0.9; this._lift = 0;
     this._seed = Math.random() * 10;
+    this._fo = new Float64Array(6);   // foot spots (x, z, yaw) captured when the current clip started
   }
   get phase() { return this.gait.phase; }
   set phase(v) { this.gait.phase = v; }
@@ -153,7 +156,7 @@ export class Character {
     this.hips.rotation.set(cur.hips[0], cur.hips[1], cur.hips[2]);
     this.rigRoot.rotation.set(cur.root[0], cur.root[1], cur.root[2]);
     const S = this.style.scale;
-    this.pivot.position.y = this._pivY * S; this.rigRoot.position.y = -this._cY * S;
+    this.pivot.position.y = this._pivY * S; this.rigRoot.position.y = -this._cY * S + this._lift;
     this.pivot.rotation.x = this.override ? this.roll : this._dispRoll;
     // the legacy 'torso' / 'head' pose keys are spread over the spine and neck chains, so every clip bends in an S-curve instead of hinging at the belt
     const T = cur.torso, C = cur.chest, hy = cur.head[1] - T[1] * 0.5 - cur.hips[1] * 0.4;
@@ -175,6 +178,9 @@ export class Character {
     const c = pickClip(name, dir, this); if (!c) return;
     this.clip = c; this.clipName = name; this.clipT = 0; this.clipSpeed = speed > 0 ? speed : 1; this.hitFired = false; this.clipHold = !!c.hold;
     this.clipW = 0; this.clipDone = false; this._linger = null; this._fid = null; this._impact = false;
+    // clip foot targets are offsets from where the feet are now (unless the clip places them absolutely)
+    const F = this._fo, ft = this.gait.feet;
+    for (let i = 0; i < 2; i++) { F[i * 3] = ft[i].x; F[i * 3 + 1] = ft[i].z; F[i * 3 + 2] = ft[i].yaw; }
     this._transition(c.blend);
   }
   stopClip() {
@@ -253,7 +259,7 @@ export class Character {
       if (k >= 1 && !this.clipDone) {
         this.clipDone = true; ev.push('done');
         if (C.stand) this.ground = null;
-        if (!this.clipHold) { if (C.linger) { this._linger = C; this._lingerT = 0; } this.clip = null; }
+        if (!this.clipHold) { if (C.linger) { this._linger = C; this._lingerT = 0; } else if (!(C.out > 0.05)) this._transition(C.endBlend || 0.14); this.clip = null; }
       }
     } else if (this._linger) {
       const L = this._linger; this._lingerT += dt;
@@ -274,6 +280,7 @@ export class Character {
     this._lookLayer(dt, cur, C);
     this._springApply(cur);
     this._rollPivot();
+    this._floorFix(cur, dt);
     for (let i = 0; i < NJ * 3; i++) if (!(buf[i] === buf[i]) || buf[i] > 1e3 || buf[i] < -1e3) { buf[i] = 0; this._nan++; this._hasOut = false; }
     this.applyPose(cur);
     if (g.strike > 0 && g.spd > 1.0) ev.push('step');
@@ -307,6 +314,13 @@ export class Character {
       const ci = ch[j];
       if (ci >= 12 && ci <= 17 && !legsToo) continue;   // FK legs are blended over the IK solution
       const o = ci * 3;
+      if (ci >= 18 && !C.feetAbs) {
+        // foot targets: offsets from the feet at clip start (x, lift, z) / (pitch, yaw offset, roll)
+        const F = this._fo, s = (ci - 18) & 1;
+        if (ci < 20) { buf[o] += (F[s * 3] + cb[o] - buf[o]) * w; buf[o + 1] += (cb[o + 1] - buf[o + 1]) * w; buf[o + 2] += (F[s * 3 + 1] + cb[o + 2] - buf[o + 2]) * w; }
+        else { buf[o] += (cb[o] - buf[o]) * w; buf[o + 1] += (F[s * 3 + 2] + cb[o + 1] - buf[o + 1]) * w; buf[o + 2] += (cb[o + 2] - buf[o + 2]) * w; }
+        continue;
+      }
       if (add) { buf[o] += cb[o] * w; buf[o + 1] += cb[o + 1] * w; buf[o + 2] += cb[o + 2] * w; }
       else if (ci === 1) { buf[o] = base[o] + cb[o] * w; buf[o + 1] = base[o + 1] + cb[o + 1] * w; buf[o + 2] = base[o + 2] + cb[o + 2] * w; }
       else { buf[o] += (cb[o] - buf[o]) * w; buf[o + 1] += (cb[o + 1] - buf[o + 1]) * w; buf[o + 2] += (cb[o + 2] - buf[o + 2]) * w; }
@@ -448,6 +462,7 @@ export class Character {
   // two-bone IK for both legs onto cur.fL / cur.fR, feet oriented by cur.ftL / cur.ftR; clip FK legs blended over it
   _legs(cur, C, w) {
     const geo = this.geo, H = _mH, buf = cur.buf;
+    if (C && C.feetGround && w > 0) this._groundFeet(buf, C);
     m3EulerXYZ(H, buf[6], buf[7], buf[8]);
     const hx = buf[3], hy = 1.0 + buf[4], hz = buf[5];
     for (let s = 0; s < 2; s++) {
@@ -476,6 +491,23 @@ export class Character {
         }
         buf[ko] += ((m[14 + s] ? Math.abs(cb[ko]) : 0) - buf[ko]) * w;
       }
+    }
+  }
+
+  // clips that plant feet on the real floor while the whole rig rotates (get-ups): move their targets from ground space into the
+  // rotated rig frame (target_rig = R_rootᵀ · target_ground, same for the foot orientation)
+  _groundFeet(buf, C) {
+    m3EulerXYZ(_mA, buf[0], buf[1], buf[2]);
+    for (let s = 0; s < 2; s++) {
+      if (!C.legIK[s]) continue;
+      const fo = (18 + s) * 3, fto = (20 + s) * 3, gx = buf[fo], gy = buf[fo + 1] + this.geo.footH, gz = buf[fo + 2];
+      buf[fo] = _mA[0] * gx + _mA[3] * gy + _mA[6] * gz;
+      buf[fo + 1] = _mA[1] * gx + _mA[4] * gy + _mA[7] * gz - this.geo.footH;
+      buf[fo + 2] = _mA[2] * gx + _mA[5] * gy + _mA[8] * gz;
+      m3EulerYXZ(_mF, buf[fto], buf[fto + 1], buf[fto + 2]);
+      m3TMul(_mK, _mA, _mF);
+      // back to (pitch, yaw, roll) = YXZ Euler
+      const m23 = clamp(_mK[5], -1, 1); buf[fto] = Math.asin(-m23); buf[fto + 1] = Math.atan2(_mK[2], _mK[8]); buf[fto + 2] = Math.atan2(_mK[3], _mK[4]);
     }
   }
 
@@ -603,6 +635,51 @@ export class Character {
     const ex = Math.abs(dyaw) - 0.75;
     if (ex > 0) { const cy = Math.sign(dyaw) * ex * 0.5; cur.chest[1] += cy * lw; dyaw -= cy; }
     cur.head[1] += dyaw * lw; cur.head[0] += dpit * lw;
+  }
+
+  // Bodies on the floor (falls, knock-downs, deaths): keep hands, elbows, knees and feet above it by re-solving any limb that dips
+  // under the floor with two-bone IK onto it (the floppy settle springs then can't push limbs through), and lift the whole rig if
+  // the trunk or head would sink.  Only runs while the rig is rolled over, i.e. for the few characters lying down.
+  _floorFix(cur, dt) {
+    const buf = cur.buf;
+    if (Math.abs(buf[0]) + Math.abs(buf[2]) < 0.5) { this._lift *= Math.exp(-10 * dt); return; }
+    this.applyPose(cur);
+    const S = this.style.scale, M = _M;
+    this.pivot.updateMatrix(); this.rigRoot.updateMatrix(); this.hips.updateMatrix(); this.torso.updateMatrix(); this.chest.updateMatrix(); this.neck.updateMatrix(); this.head.updateMatrix();
+    M[0].multiplyMatrices(this.pivot.matrix, this.rigRoot.matrix); M[1].multiplyMatrices(M[0], this.hips.matrix);
+    M[2].multiplyMatrices(M[1], this.torso.matrix); M[3].multiplyMatrices(M[2], this.chest.matrix);
+    // trunk + head: lift the rig so none of them sinks (heights relative to the root = the floor)
+    let need = -1;
+    _p1.setFromMatrixPosition(M[1]); need = Math.max(need, 0.14 * S - _p1.y);
+    _p1.set(0, 0.2, 0).applyMatrix4(M[3]); need = Math.max(need, 0.18 * S - _p1.y);
+    M[4].multiplyMatrices(M[3], this.neck.matrix); M[4].multiply(this.head.matrix); _p1.set(0, 0.17, 0).applyMatrix4(M[4]); need = Math.max(need, 0.2 * S - _p1.y);
+    const want = Math.max(0, need + this._lift);
+    this._lift += (want - this._lift) * (1 - Math.exp(-12 * dt));
+    const lift = this._lift;
+    // limbs
+    for (let s = 0; s < 4; s++) {
+      const arm = s < 2, side = s & 1;
+      const a = arm ? (side ? this.shR : this.shL) : (side ? this.hipR : this.hipL);
+      const b = arm ? (side ? this.elR : this.elL) : (side ? this.knR : this.knL);
+      const c = arm ? (side ? this.wrR : this.wrL) : (side ? this.anR : this.anL);
+      const P = arm ? M[3] : M[1];
+      a.updateMatrix(); b.updateMatrix(); c.updateMatrix();
+      M[5].multiplyMatrices(P, a.matrix); M[6].multiplyMatrices(M[5], b.matrix); M[7].multiplyMatrices(M[6], c.matrix);
+      _p2.setFromMatrixPosition(M[6]);                                  // elbow / knee
+      _p3.set(0, arm ? -0.1 : -0.05, arm ? 0 : 0.1).applyMatrix4(M[7]);  // hand / foot centre
+      _p4.setFromMatrixPosition(M[7]);                                  // wrist / ankle
+      const clear = (arm ? 0.07 : 0.09) * S - lift;
+      const low = Math.min(_p2.y, _p3.y, _p4.y);
+      if (low >= clear) continue;
+      const up = clear - low;
+      _p4.y += up; _p2.y += up + 0.15 * S;   // and bias the elbow / knee to bulge away from the floor
+      _Mi.copy(P).invert();
+      _p4.applyMatrix4(_Mi).sub(a.position); _p2.applyMatrix4(_Mi).sub(a.position);
+      const la = Math.abs(b.position.y), lb = Math.abs(c.position.y);
+      const ao = (arm ? 6 + side : 12 + side) * 3, bo = (arm ? 8 + side : 14 + side) * 3;
+      const bend = solveTwoBone(la, lb, _p4.x, _p4.y, _p4.z, _p2.x, _p2.y, _p2.z, arm ? -1 : 1, buf, ao);
+      buf[bo] = bend;
+    }
   }
 
   // dodge roll: rotate about the tucked body's centre, which drops towards the ground mid-roll; slow in, fast through, slow out

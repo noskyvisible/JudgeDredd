@@ -38,7 +38,9 @@ const judgeTex = (() => {
   return canvasTex(c);
 })();
 
-const _v = new THREE.Vector3(), _toP = new THREE.Vector3();
+const _v = new THREE.Vector3(), _toP = new THREE.Vector3(), _hd = new THREE.Vector3(), _lk = new THREE.Vector3();
+// hit direction in character space (null when there is none), for directional reactions / secondary motion
+const hitDir = (e, info) => (info && info.dir && Math.abs(info.dir.x) + Math.abs(info.dir.z) > 1e-4 ? e.ch.localDir(info.dir, _hd) : null);
 
 export class Enemy {
   constructor(typeName, pos, crimeData = {}) {
@@ -128,6 +130,8 @@ export class Enemy {
     if (this.state === 'surrender' && type === 'melee') return;
     if (type === 'melee' && this.state === 'subdued') return;
     this.hp -= dmg; this.hitCount++;
+    const hd = type === 'fire' ? null : hitDir(this, info);
+    if (hd) this.ch.impulse(hd, Math.min(2.2, 0.35 + dmg / 25 + (info.knock || 0) * 0.06));
     if (info.knock) { this.vel.addScaledVector(info.dir || _v.set(0, 0, 0), info.knock); }
     if (type === 'fire') { this.burn = 2; return this.afterDamage(type, info); }
     if (G.hud && type !== 'fire') G.hud.damageNumber?.(this, dmg);
@@ -153,7 +157,7 @@ export class Enemy {
     if (info.type === 'counter' || info.knock > 8 || info.finisher) { this.knockdown(info); return; }
     if (!sa || chance(0.25)) {
       if (this.state !== 'stagger') { this.setState('stagger', 0); }
-      this.stateT = 0; this.ch.play('hurt', { speed: 1.3 });
+      this.stateT = 0; this.ch.play('hurt', { speed: 1.3, dir: hitDir(this, info) });
       if (info.dir && info.type === 'melee') this.vel.addScaledVector(info.dir, 4.5);
     }
     if (this.T.meek) { this.surrender(); }
@@ -163,7 +167,7 @@ export class Enemy {
 
   knockdown(info = {}) {
     this.setState('down', 0);
-    this.ch.play('subdued', { speed: 2.2 });
+    this.ch.play('knockdown', { speed: 1.1, dir: hitDir(this, info) });
     if (info.dir) this.vel.addScaledVector(info.dir, info.type === 'counter' ? 9 : 6);
     this.downT = 1.4;
   }
@@ -192,7 +196,7 @@ export class Enemy {
   die(info = {}) {
     this.releaseToken();
     this.setState('dead'); this.dead = true; this.hp = 0; this.fadeT = 0;
-    this.ch.play('die', { speed: 1.5 });
+    this.ch.play('die', { speed: 1.5, dir: hitDir(this, info) });
     if (info.dir) this.vel.addScaledVector(info.dir, 7);
     if (this.weapon) this.weapon.visible = false;
     this.marker.visible = false;
@@ -315,6 +319,10 @@ export class Enemy {
     // animate
     ch.speed = (this.state === 'engage' || this.state === 'flee') ? (this.walking || 0) : 0;
     if (this.state === 'telegraph' && T.ranged) { ch.aim = damp(ch.aim, 1, 10, dt); ch.aimPitch = 0.05; } else ch.aim = damp(ch.aim, 0, 8, dt);
+    // body language: combat guard once aggro, panic when fleeing, eyes on the Judge
+    const st = this.state, up = st !== 'dead' && st !== 'subdued' && st !== 'down';
+    ch.stance = st === 'flee' ? 'panic' : this.aggro && (st === 'engage' || st === 'telegraph' || st === 'recover' || st === 'stagger') ? 'ready' : null;
+    ch.lookAt(up && pl.alive && dist < 30 && (this.aggro || dist < 14 || st === 'surrender') ? pl.centre(_lk) : null);
     const ev = ch.update(dt);
     for (const e of ev) {
       if (e === 'hit' && this.state === 'attack') this.onAttackHit();
@@ -330,7 +338,7 @@ export class Enemy {
 
   beginTelegraph() {
     this.setState('telegraph');
-    this.ch.play(this.T.ranged ? 'shoot' : (this.T.weapon === 'bat' ? 'telegraph' : 'telegraph'), { speed: 0.9 });
+    this.ch.play(this.T.ranged ? 'aim' : 'telegraph', { speed: 0.9 });
     this.ch.clipT = 0;
     audio.ui('tick');
     G.hud?.warn?.();
