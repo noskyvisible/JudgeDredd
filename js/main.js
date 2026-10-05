@@ -5,6 +5,7 @@ import { reflection } from './reflect.js';
 import { createPost } from './post.js';
 import { eagleShape } from './world.js';
 import { buildStreetProps, updateStreetProps, streetPropStreams } from './streetprops.js';
+import { buildMonorail } from './monorail.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -60,6 +61,7 @@ fx.init(scene);
 { const realRandom = Math.random; Math.random = mulberry32(19771977); try { world.build(scene, renderer); } finally { Math.random = realRandom; } }
 reflection.hide.push(...(world.mirrorHide || []));
 buildStreetProps(scene);
+const monorail = buildMonorail(scene);
 setQuality(G.quality);
 fx.setScale(innerHeight * PR);
 
@@ -189,7 +191,7 @@ function simulate(dt) {
     }
     G.enemies.update(gdt); G.civs.update(gdt); G.traffic.update(gdt); G.pickups.update(gdt); G.crimes.update(gdt); weapons.update(gdt);
   }
-  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos);
+  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt);
   fx.update(dt, gdt);
   const b = G.mode === 'bike' ? bike : null;
   const sp01 = b ? clamp((Math.abs(b.speed) - 40) / 70, 0, 1) : 0;
@@ -236,7 +238,7 @@ function updateTitle(dt) {
   post.uniforms.uFade.value = Math.max(0, Math.min(fadeIn, fadeOut));
   if (T.t >= S.d) { T.i = (T.i + 1) % TITLE_SHOTS.length; T.t = 0; }
   player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
-  world.update(dt, camera.position); updateStreetProps(dt, camera.position); fx.update(dt, dt);
+  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); fx.update(dt, dt);
   post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
   const Ut = post.uniforms; Ut.uDof.value = QUALITY[G.quality].ao ? 0.8 : 0; Ut.uFocus.value = camera.position.distanceTo(_tl) * 0.95;
 }
@@ -270,5 +272,5 @@ requestAnimationFrame(frame);
 window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams });
+Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
 window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };

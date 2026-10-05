@@ -45,6 +45,8 @@ export const SHOTS = {
   props:       { at: [0, 0, 0], propKind: 'vending', settle: 30 },
   props2:      { at: [0, 0, 0], propKind: 'hydrant', settle: 30 },
   props3:      { at: [0, 0, 0], propKind: 'bench', settle: 30 },
+  rail:        { at: [250, 262, 0], free: { pos: [118, 4.5, 262], look: [210, 17, 250], fov: 62 }, settle: 30, setup: 'rail' },
+  rail_view:   { at: [250, 280, 0], free: { pos: [214, 3.2, 281], look: [250, 16.5, 252], fov: 60 }, settle: 30, setup: 'rail' },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -101,6 +103,7 @@ for (const name of names) {
       P.pos.set(s.x + nx * 6, 0, s.z + nz * 6); for (let i = 0; i < 10; i++) window.__step(1);
       c.position.set(s.x + nx * 3.6 + nz * 1.2, 1.5, s.z + nz * 3.6 - nx * 1.2); c.fov = 55; c.updateProjectionMatrix(); c.lookAt(s.x, 0.8, s.z); c.updateMatrixWorld(true);
     }
+    if (sh.setup === 'rail') { const tr = T.monorail.trains[0]; tr.s = 250 + 40; T.monorail.update(0); }   // park the east-west train in view
     if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
       T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);
       document.getElementById('title').classList.remove('hidden');
