@@ -4,7 +4,7 @@ import { patchRim } from './shaders.js';
 import { eagleShape } from './world.js';
 import { makeCanvas, canvasTex } from './util.js';
 import { heroTextures, ATLAS, atlasUV } from './charhero_tex.js';
-import { Surf, loftGeo, sweepGeo, extrudeGeo, rrect, ellipse, roundPoly, lin, mergeGeos, deform, gauss, V } from './charhero_geo.js';
+import { Surf, loftGeo, sweepGeo, extrudeGeo, rrect, roundPoly, lin, mergeGeos, gauss, V } from './charhero_geo.js';
 
 // ===========================================================================
 // Dredd's weapons.

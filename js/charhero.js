@@ -3,7 +3,7 @@ import { patchRim } from './shaders.js';
 import { eagleShape } from './world.js';
 import { heroTextures, ATLAS, atlasUV } from './charhero_tex.js';
 import {
-  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX, bakeHero, proxyOcclusion, stitchGeo,
+  Surf, loftGeo, plateGeo, plateAY, bandGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX, bakeHero, proxyOcclusion, stitchGeo,
   rrect, ellipse, roundPoly, sstep, gauss, lin, wrapA, TAU, V,
 } from './charhero_geo.js';
 import { buildHelmet, buildFace, fistGeos, ribbedPauldron, eaglePauldron, bootFootGeos, smoothBox } from './charhero_parts.js';
