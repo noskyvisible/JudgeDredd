@@ -62,16 +62,16 @@ function heroMaterials() {
   const T = heroTextures();
   const rep = (tex, r) => { const t = tex.clone(); t.repeat.set(r, r); t.needsUpdate = true; return t; };
   const lN = rep(T.leatherN, 4.6), lR = rep(T.leatherR, 4.6), lN2 = rep(T.leatherN, 6.5), lR2 = rep(T.leatherR, 3.2);
-  const gR = rep(T.goldR, 3.0), gN = rep(T.goldN, 3.0);
+  const gR = rep(T.goldR, 3.0), gN = rep(T.goldN, 3.0), dS = rep(T.dropsN, 5.5), dH = rep(T.dropsN, 4.2);
   const P = (o) => new THREE.MeshPhysicalMaterial(o);
   const M = {
     // glossy black uniform: lacquered leather plates, a grain you only catch in the highlights
     suit: P({ color: 0x0b0c10, roughness: 0.44, metalness: 0.0, roughnessMap: lR, normalMap: lN, normalScale: new THREE.Vector2(0.45, 0.45),
-      clearcoat: 1.0, clearcoatRoughness: 0.13, clearcoatNormalMap: lN, clearcoatNormalScale: new THREE.Vector2(0.18, 0.18), envMapIntensity: 1.7 }),
+      clearcoat: 1.0, clearcoatRoughness: 0.13, clearcoatNormalMap: dS, clearcoatNormalScale: new THREE.Vector2(0.45, 0.45), envMapIntensity: 1.7 }),   // rain beads on the lacquer
     // matte undersuit at the joints
     under: P({ color: 0x0f1015, roughness: 0.62, metalness: 0.0, roughnessMap: lR2, normalMap: lN2, normalScale: new THREE.Vector2(0.8, 0.8),
       clearcoat: 0.25, clearcoatRoughness: 0.45, sheen: 0.5, sheenColor: new THREE.Color(0x3a4258), sheenRoughness: 0.55, envMapIntensity: 1.1 }),
-    helmet: P({ color: 0x07080b, roughness: 0.28, metalness: 0.1, clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 2.0 }),
+    helmet: P({ color: 0x07080b, roughness: 0.28, metalness: 0.1, clearcoat: 1.0, clearcoatRoughness: 0.05, clearcoatNormalMap: dH, clearcoatNormalScale: new THREE.Vector2(0.55, 0.55), envMapIntensity: 2.0 }),
     gold: P({ color: 0xdcaa48, roughness: 1.0, metalness: 1.0, roughnessMap: gR, normalMap: gN, normalScale: new THREE.Vector2(0.35, 0.35),
       emissive: 0x3a2508, emissiveIntensity: 0.6, envMapIntensity: 1.6 }),
     goldDark: P({ color: 0xa87a2c, roughness: 1.0, metalness: 1.0, roughnessMap: gR, normalMap: gN, normalScale: new THREE.Vector2(0.35, 0.35),
@@ -278,7 +278,7 @@ export function buildHero(ch, st) {
     const g = driven(chest, (o) => { o.position.set(sx * 0.52, 0.36, 0); o.rotation.set(sh.rotation.x * kx, sh.rotation.y * ky, sh.rotation.z * kz, 'YXZ'); }, 'pauldron' + side);
     groups.push(g); return g;
   };
-  putAll(pd('L', 0.34, 0.3, 0.5), ribbedPauldron(M, 1));
+  putAll(pd('L', 0.3, 0.3, 0.5), ribbedPauldron(M, 1));
   putAll(pd('R', 0.36, 0.3, 0.5), eaglePauldron(M, -1));
 
   // =================================================================== legs

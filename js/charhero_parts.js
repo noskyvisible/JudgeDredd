@@ -83,7 +83,7 @@ export function buildHelmet(M) {
     P(xf(g, frame(p, tg, n)), M.gold);
   }
   // red tail-light strip at the back of the crown
-  P(plateGeo(S, rrect(0.075, 0.011, 0.004, 2), { center: [Math.PI, 0.155], t: 0.004, h0: H + 0.002, bevel: 0.0015, n: 24, nI: 2, nB: 1 }), M.visor);
+  P(plateGeo(S, rrect(0.1, 0.014, 0.005, 2), { center: [Math.PI, 0.16], t: 0.004, h0: H + 0.002, bevel: 0.0015, n: 24, nI: 2, nB: 1 }), M.visor);
   // interior liner: what you see when looking into the face opening or up under the rim
   P(loftGeo(S, { ys: lin(-0.135, 0.22, 12), a0: 0.22, a1: TAU - 0.22, na: 40, h: -0.017, flip: true }), M.under);
   for (const [g] of out) g.translate(0, HEAD_Y, 0);
@@ -226,7 +226,7 @@ export function ribbedPauldron(M, sx) {
   const R = [[-0.022, 0.052, 2.62, 0.016], [-0.106, 0.05, 2.5, 0.014], [-0.182, 0.042, 2.3, 0.01]];
   for (const [yc, hh, sp, h0] of R) P(roll(S, yc, hh, sp, h0, 0.016, 0.028), M.gold);
   for (const [yc, , , h0] of R) for (const e of [-1, 1]) { const a = Math.PI / 2 + e * 1.55; P(xf(rivetGeo(0.0095, 0.6, 7), frame(S.at(a, yc, h0 + 0.036), S.nrm(a, yc))), M.metal); }
-  P(loftGeo(S, { ys: lin(-0.23, 0.04, 6), a0: Math.PI / 2 - 2.8, a1: Math.PI / 2 + 2.8, na: 36, h: 0.004, flip: true }), M.under);
+  P(loftGeo(S, { ys: lin(-0.23, 0.04, 6), a0: Math.PI / 2 - 2.8, a1: Math.PI / 2 + 2.8, na: 36, h: 0.004, flip: true }), M.goldDark);   // inside of the shell
   return finishPad(out, sx);
 }
 
@@ -236,7 +236,7 @@ export function eaglePauldron(M, sx) {
   const S = padSurf(0.97);
   P(loftBetween(S, () => -0.13, () => 0.165, { na: 48, ns: 11, h: 0.014 }), M.goldDark);
   P(roll(S, -0.168, 0.046, 2.45, 0.008, 0.015, 0.02), M.gold);
-  P(loftGeo(S, { ys: lin(-0.23, 0.0, 5), a0: Math.PI / 2 - 2.6, a1: Math.PI / 2 + 2.6, na: 36, h: 0.004, flip: true }), M.under);
+  P(loftGeo(S, { ys: lin(-0.23, 0.0, 5), a0: Math.PI / 2 - 2.6, a1: Math.PI / 2 + 2.6, na: 36, h: 0.004, flip: true }), M.goldDark);   // inside of the shell
   // ---- folded wings: overlapping rows of long feathers hanging down the outer half of the pad, front and back.
   // Each feather is swept flat (lens profile with a raised rachis, pointed tip) and mapped through the pad
   // surface's own (angle, height, lift) parameters so it lies on the dome.

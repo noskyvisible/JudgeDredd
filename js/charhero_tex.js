@@ -135,6 +135,25 @@ export function heroTextures() {
     T.goldR = nrmTex(greyCanvas(rough, W, H, 0, 1));
     T.goldN = nrmTex(normalCanvas(hgt, W, H, 2.0));
   }
+  // ---------------- rain droplets + runs (clearcoat normal) ----------------
+  {
+    const W = 512, H = 512, F = new Float32Array(W * H);
+    const drop = (cx, cy, r, k = 1) => {
+      const R = Math.ceil(r + 1);
+      for (let j = -R; j <= R; j++) for (let i = -R; i <= R; i++) {
+        const d2 = (i * i + j * j) / (r * r); if (d2 >= 1) continue;
+        const xx = ((Math.floor(cx) + i) % W + W) % W, yy = ((Math.floor(cy) + j) % H + H) % H;
+        F[yy * W + xx] = Math.max(F[yy * W + xx], Math.sqrt(1 - d2) * k);
+      }
+    };
+    for (let k = 0; k < 900; k++) drop(rng() * W, rng() * H, 0.9 + Math.pow(rng(), 2.5) * 4.2, 0.6 + rng() * 0.4);
+    for (let k = 0; k < 36; k++) {   // runs: a bead with a thin trail (uv v points up the surface)
+      const x = rng() * W, y0 = rng() * H, len = 18 + rng() * 60, r = 1.6 + rng() * 2.2;
+      for (let t = 0; t < len; t += 0.7) drop(x + Math.sin(t * 0.13 + k) * 1.2, y0 + t, r * (0.35 + 0.25 * Math.sin(t * 0.4)), 0.45);
+      drop(x, y0, r * 1.15, 1);
+    }
+    T.dropsN = nrmTex(normalCanvas(F, W, H, 2.4));
+  }
   // ---------------- brushed gunmetal ----------------
   {
     const W = 256, H = 256, F = new Float32Array(W * H);
