@@ -81,6 +81,19 @@ export function buildMonorail(scene) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
   return {
     trains,
+    // 0..1 loudness of the nearest train for a listener at p, and whether it is closing in (+1) or leaving (-1)
+    hearing(p) {
+      let best = 0, appr = 0;
+      for (const t of trains) {
+        const front = t.s + CAR_L / 2, back = t.s - (t.n - 1) * (CAR_L + GAP) - CAR_L / 2;
+        const a = t.alongX ? p.x : p.z, c = Math.min(Math.max(a, back), front);          // closest point along the train to the listener
+        const px = t.alongX ? c : t.fixed, pz = t.alongX ? t.fixed : c;
+        const d = Math.hypot(p.x - px, p.z - pz, (p.y - (t.L.y + 2)) * 0.6);
+        const lv = Math.max(0, 1 - d / 95);
+        if (lv > best) { best = lv; appr = Math.sign(a - c) === 0 ? 0 : (a > front ? -1 : a < back ? 1 : 0) * Math.sign(t.L.speed); }
+      }
+      return { level: best, approach: appr };
+    },
     update(dt) {
       for (const t of trains) {
         t.s += t.L.speed * dt;

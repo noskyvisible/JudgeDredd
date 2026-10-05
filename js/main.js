@@ -207,6 +207,7 @@ function simulate(dt) {
   audio.setIntensity(clamp(engaged * 0.22 + (b ? clamp(Math.abs(b.speed) / 100, 0, 0.4) : 0) + (player.combo > 3 ? 0.2 : 0), 0, 1));
   const bk = G.mode === 'bike' ? bike : (bike.called ? bike : null);
   audio.setEngine(!!bk, bk ? clamp(Math.abs(bk.speed) / 78, 0, 1.3) : 0, bk?.boosting);
+  { const h = monorail.hearing(camera.position); audio.setRail(h.level, h.approach); }
   audio.update(dt);
   hud.update(dt);
 }
