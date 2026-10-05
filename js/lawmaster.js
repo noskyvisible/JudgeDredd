@@ -644,6 +644,13 @@ export function makeLawmasterModel(pal = {}) {
     vis: { cf: 0, cr: 0, vf: 0, vr: 0, prevSpeed: 0, acc: 0, spinF: 0, spinR: 0, brakeK: 0, boostK: 0, surge: 0, vsurge: 0, t: Math.random() * 10, dist: 0, heat: 0, glowBase: new THREE.Color(P.glow) },
   };
   updateLawmasterVisuals({ model: g, speed: 0, steer: 0, ctrl: { throttle: 0, brake: 0, hold: true }, lean: 0 }, 0);
+  // despawned perp bikes are simply removed from the scene: free this instance's GPU buffers then
+  // (static materials and canvas textures are shared/cached and stay alive)
+  const shared = new Set(Object.values(staticMats(P)));
+  g.addEventListener('removed', () => {
+    g.traverse((o) => { if (o.isMesh || o.isInstancedMesh) { o.geometry.dispose(); for (const m of [].concat(o.material)) if (!shared.has(m)) m.dispose(); } });
+    for (const s of [...flares.sirL, ...flares.sirR, ...flares.head, flares.tail, flares.brake]) s.material.dispose();
+  });
   return g;
 }
 
