@@ -58,6 +58,8 @@ export const SHOTS = {
   air_ind: { at: [-452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
   air_market: { at: [52, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
   air_docks: { at: [452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  volley:      { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 6 },
+  volley2:     { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 14 },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -121,6 +123,16 @@ for (const name of names) {
       for (let i = 0; i < 20; i++) window.__step(1);
       G.judgement.open(e); G.judgement.select(4);
       T.post.uniforms.uDof.value = 0.9; T.post.uniforms.uFocus.value = 4;
+    }
+    if (sh.setup === 'volley') {   // one of every round type fired side by side down the street, caught mid-flight from just behind
+      const A = [0, 1, 2, 4, 5], base = new THREE.Vector3(P.pos.x, 1.45, P.pos.z + 1.0);
+      for (let i = 0; i < A.length; i++) {
+        const from = base.clone().add(new THREE.Vector3((i - 2) * 0.9, 0, 0));
+        T.weapons.fire('player', from, new THREE.Vector3(0, 0.001, 1), A[i], { spread: 0 });
+        T.fx.muzzle(from, new THREE.Vector3(0, 0, 1), 0xffd070);
+      }
+      for (let k = 0; k < (sh.flight || 9); k++) window.__step(1);
+      const c = T.camera; c.position.set(P.pos.x + 3.4, 1.35, P.pos.z - 2.2); c.fov = 54; c.updateProjectionMatrix(); c.lookAt(P.pos.x - 1.2, 1.4, P.pos.z + 18); c.updateMatrixWorld(true);
     }
     if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
       T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);

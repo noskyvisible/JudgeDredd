@@ -17,9 +17,44 @@ export const AMMO = [
 const projectiles = [];
 const firePatches = [];
 const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpC = new THREE.Vector3();
-const boltGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0, -0.5);
+// Projectiles are velocity-aligned billboards: a soft halo and a thin white-hot core, both additive.  The quad spans local z in [-1, 0]
+// (head at the origin, tail behind it); the mesh scale gives width (x) and length (z).  Seen side-on it is a streak; seen end-on (the usual
+// over-the-shoulder view of a round flying away) the projected length collapses into a round glow instead of vanishing, and a minimum angular
+// size keeps tracers visible at range.  No boxes, so nothing ever reads as a glass cube up close.
+const boltGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0, -0.5);
 const boltMats = {};
-const bolt = (color, boost = 3) => boltMats[color + '_' + boost] || (boltMats[color + '_' + boost] = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(boost), toneMapped: false, blending: THREE.AdditiveBlending, transparent: true, opacity: boost > 2 ? 1 : 0.35, depthWrite: false }));
+const bolt = (color, boost, tight, minAng) => {
+  const key = color + '_' + boost + '_' + tight + '_' + minAng;
+  return boltMats[key] || (boltMats[key] = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    uniforms: { col: { value: new THREE.Color(color).multiplyScalar(boost) }, tight: { value: tight }, minAng: { value: minAng } },
+    vertexShader: `varying vec2 vUv; varying float vEnd; uniform float minAng;
+      void main(){
+        vec3 ax = (modelMatrix * vec4(0.0, 0.0, -1.0, 0.0)).xyz; float len = length(ax); ax /= max(len, 1e-4);
+        float wid = length((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+        vec3 origin = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        vec3 toCam = cameraPosition - origin; float dist = length(toCam); vec3 v = toCam / max(dist, 1e-4);
+        wid = max(wid, dist * minAng);                                       // never thinner than a few pixels, however far
+        vec3 axp = ax - v * dot(ax, v); float pl = length(axp);               // the axis projected onto the screen plane (0 = end-on, 1 = side-on)
+        vec3 side = pl > 1e-3 ? normalize(cross(ax, v)) : normalize(cross(v, vec3(0.0, 1.0, 0.0)));
+        vec3 lenDir = pl > 1e-3 ? axp / pl : normalize(cross(side, v));
+        float effLen = max(len * pl, wid * 1.15);                             // end-on: a round spot, not a sliver
+        vec3 wp = origin + lenDir * (-position.z) * effLen + side * position.x * wid;
+        vUv = vec2(position.x + 0.5, -position.z); vEnd = 1.0 - pl;
+        gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
+      }`,
+    fragmentShader: `varying vec2 vUv; varying float vEnd; uniform vec3 col; uniform float tight;
+      void main(){
+        float across = 1.0 - abs(vUv.x * 2.0 - 1.0);
+        float prof = pow(max(across, 0.0), tight);
+        // seen along its length the glow should be round: fade the length profile by distance from the centre of the quad instead
+        float alongStreak = (1.0 - smoothstep(0.0, 1.0, vUv.y)) * smoothstep(0.0, 0.06, vUv.y + 0.02);
+        float r = length(vec2(vUv.x * 2.0 - 1.0, vUv.y * 2.0 - 1.0)); float alongRound = pow(max(1.0 - r, 0.0), tight);
+        float a = mix(prof * (0.25 + 0.75 * alongStreak), alongRound, smoothstep(0.35, 0.95, vEnd));
+        gl_FragColor = vec4(col * a, a);
+      }`,
+  }));
+};
 
 export const weapons = {
   projectiles, firePatches,
@@ -32,9 +67,9 @@ export const weapons = {
     const wid = a.explosive || a.homing ? 0.34 : a.id === 'ap' ? 0.2 : 0.14;
     const len = a.explosive ? 1.4 : a.homing ? 1.8 : a.id === 'ap' ? 6 : 4.2;
     const mesh = new THREE.Group();
-    const core = new THREE.Mesh(boltGeo, bolt(a.color, 5)); core.scale.set(wid, wid, len); mesh.add(core);
-    const halo = new THREE.Mesh(boltGeo, bolt(a.color, 1.4)); halo.scale.set(wid * 3.6, wid * 3.6, len * 1.15); mesh.add(halo);
-    mesh.traverse((o) => { if (o.isMesh) o.renderOrder = 12; });
+    const core = new THREE.Mesh(boltGeo, bolt(0xffffff, 3.2, 3.0, 0.0022)); core.scale.set(wid * 0.9, wid, len * 0.8); mesh.add(core);                   // white-hot centre
+    const halo = new THREE.Mesh(boltGeo, bolt(a.color, 4.5, 1.7, 0.0075)); halo.scale.set(wid * 4.2, wid * 4.2, len * 1.3); mesh.add(halo);               // coloured glow
+    mesh.traverse((o) => { if (o.isMesh) { o.renderOrder = 12; o.frustumCulled = false; } });
     G.scene.add(mesh);
     const p = {
       a, owner, mesh, pos: from.clone(), vel: d.clone().multiplyScalar(opts.speed ?? a.speed), life: a.homing ? 6 : 2.2, bounces: a.bounces || 0,
