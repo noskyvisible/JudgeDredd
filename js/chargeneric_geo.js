@@ -239,7 +239,8 @@ export function headPoint(H, th, ph) {
   z *= lerp(1, H.cranium, Zb * sstep(-0.15, 0.45, Y));
   // forehead slope + flatter crown
   z -= H.forehead * clamp(Y - 0.3, 0, 1) * Zf * 1.6;
-  if (Y > 0.75) y -= (Y - 0.75) * 0.06 * H.ry;
+  if (Y > 0.8) y -= (Y - 0.8) * 0.035 * H.ry;
+  z -= 0.012 * Zb * gauss((Y - 0.15) / 0.35) * 0; // (occiput handled by cranium)
   // chin
   const chinM = gauss((Y + 0.84) / 0.17) * Math.pow(Zf, 3);
   z += H.chin * chinM; y -= H.chinDrop * chinM;
@@ -264,7 +265,9 @@ export function headPoint(H, th, ph) {
   if (rad !== 0) { const l = Math.hypot(x, z) || 1; x += x / l * rad; z += z / l * rad; }
   // mouth area protrusion, lips
   z += H.muzzle * gauss((Y + 0.46) / 0.21) * gauss(ph / 0.5);
-  z += 0.0035 * gauss((Y + 0.4) / 0.05) * gauss(ph / 0.3) + 0.003 * gauss((Y + 0.53) / 0.05) * gauss(ph / 0.26);
+  z += 0.005 * gauss((Y + 0.4) / 0.055) * gauss(ph / 0.3) + 0.0045 * gauss((Y + 0.535) / 0.055) * gauss(ph / 0.27) - 0.002 * gauss((Y + 0.47) / 0.025) * gauss(ph / 0.28);
+  // nasolabial folds / temple hollows give the face planes
+  for (const s2 of [-1, 1]) z -= 0.0025 * gauss((Y + 0.33) / 0.12) * gauss((ph - s2 * 0.42) / 0.08);
   return [x, y + H.cy, z + H.cz];
 }
 // analytic surface normal of the sculpted head (finite differences); radial at the poles

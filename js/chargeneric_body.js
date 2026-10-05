@@ -45,8 +45,8 @@ const TORSO = [
   [1.50, 0.270, 0.168, 0.006, 2.5],
   [1.60, 0.280, 0.172, 0.003, 2.55],
   [1.68, 0.285, 0.166, -0.002, 2.6],
-  [1.74, 0.300, 0.150, -0.008, 3.0],
-  [1.80, 0.270, 0.130, -0.014, 2.8],
+  [1.74, 0.300, 0.150, -0.008, 2.6],
+  [1.80, 0.270, 0.130, -0.014, 2.5],
   [1.855, 0.180, 0.106, -0.016, 2.4],
   [1.90, 0.100, 0.086, -0.014, 2.1],
   [1.93, 0.082, 0.076, -0.012, 2.0],
@@ -580,7 +580,8 @@ function buildHeadAndNeck(c) {
     const cov = spec.hat && HAT[spec.hat.kind]?.covers;
     const head = headPiece(H, { covered: cov ? (th, ph) => cov(th, ph, spec.hat) : null }); toRig(head); K.add('head', 'skin', head, { rect: face, group: 'head', aoK: 0.8 });
     const nose = nosePiece(H); toRig(nose); K.add('head', 'skin', nose, { rect: face, group: 'head', aoK: 0 });
-    if (!(spec.hat && HAT[spec.hat.kind]?.hidesEars)) for (const s of [1, -1]) { const e = earPiece(H, s); toRig(e); K.add('head', 'skin', e, { rect: face, group: 'head', aoK: 0 }); }
+    const earsHidden = (spec.hat && HAT[spec.hat.kind]?.hidesEars) || (spec.hair && ['long', 'afro', 'dreads'].includes(spec.hair.kind));
+    if (!earsHidden) for (const s of [1, -1]) { const e = earPiece(H, s); toRig(e); K.add('head', 'skin', e, { rect: face, group: 'head', aoK: 0 }); }
     // eye patches: hi-res painted eyes on a skin-tight patch
     const er = SK.uv(spec.eyes || 'eyeA');
     for (const s of [1, -1]) {
@@ -650,9 +651,9 @@ const HAIR = {
     }
     // fin as a loft of thin diamond rings along the base path; spikes via height modulation
     for (let i = 0; i <= n; i++) {
-      const p = pts[i], spike = 1 + (h.spikes ?? 0.6) * (i % 2 ? -0.35 : 0.35);
+      const p = pts[i], spike = 1 + (h.spikes ?? 0.75) * (i % 2 ? -0.42 : 0.42);
       const hh = Math.max(0.006, p.height * spike);
-      rings.push({ c: [0, p.base[1] + p.dir[1] * hh * 0.5, p.base[2] + p.dir[2] * hh * 0.5], rx: (h.w ?? 0.022) * (1 - 0.4 * (hh / 0.12)), rz: hh * 0.5, ux: [1, 0, 0], uz: p.dir, e: 1.6, v: i / n });
+      rings.push({ c: [0, p.base[1] + p.dir[1] * hh * 0.5, p.base[2] + p.dir[2] * hh * 0.5], rx: (h.w ?? 0.034) * (1 - 0.35 * (hh / 0.12)), rz: hh * 0.5, ux: [1, 0, 0], uz: p.dir, e: 1.5, v: i / n });
     }
     const P = loft(rings, { seg: 8, capTop: true, capBot: true });
     toRig(P); K.add('head', 'skin', P, { rect, group: 'head', aoK: 0.4 });

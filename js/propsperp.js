@@ -20,11 +20,11 @@ function atlas() {
   ATL = new Atlas('props', [
     S('wood', 128, 64, (P) => { P.fill('A', 186, { rough: 0.72, metal: 0 }); for (let y = 0; y < P.h; y += 1) P.line([[0, y + Math.sin(y * 0.7) * 2], [P.w, y + Math.sin(y * 0.7 + 3) * 2]], { mul: 0.86 + 0.12 * Math.sin(y * 1.9) * Math.sin(y * 0.37), lw: 1, h: 128 + 30 * Math.sin(y * 1.9), hA: 0.6 }); for (let i = 0; i < 4; i++) P.ellipse(P.rng() * P.w, P.rng() * P.h, 6, 2.5, { mul: 0.65, blur: 1.5 }); P.grime((u, v, n) => n * n, { dark: 0.3 }); }),
     S('tape', 64, 64, (P) => { P.fill('B', 120, { rough: 0.95, metal: 0 }); for (let y = -64; y < 128; y += 7) P.line([[0, y], [P.w, y + 28]], { mul: 0.55, lw: 1.6, h: 70 }); P.grain('cotton', 1); }),
-    S('steel', 64, 64, (P) => metal(P, { slot: 'C', shade: 186, rough: 0.32 })),
-    S('dark', 64, 64, (P) => { metal(P, { slot: 'A', shade: 186, rough: 0.42, metal: 0.85 }); P.grime((u, v, n) => n * 0.6, { dark: 0.25 }); }),
+    S('steel', 64, 64, (P) => metal(P, { slot: 'C', shade: 200, rough: 0.38, metal: 0.7 })),
+    S('dark', 64, 64, (P) => { metal(P, { slot: 'A', shade: 196, rough: 0.45, metal: 0.6 }); for (let y = 4; y < 60; y += 6) P.rect(0, y, 64, 1.5, { mul: 0.7, h: 80 }); P.grime((u, v, n) => n * 0.6, { dark: 0.25 }); }),
     S('polymer', 64, 64, (P) => { P.fill('B', 186, { rough: 0.7, metal: 0 }); for (let x = 0; x < P.w; x += 4) for (let y = 0; y < P.h; y += 4) P.rect(x, y, 2, 2, { mul: 0.8, h: 90, hA: 0.8 }); }),
     S('rust', 64, 64, (P) => { P.fill('C', 150, { rough: 0.8, metal: 0.4 }); P.grain('plate', 1.5); P.grime((u, v, n) => n * 1.4, { dark: 0.2, rough: 0.2 }); for (let i = 0; i < 40; i++) P.ellipse(P.rng() * P.w, P.rng() * P.h, 2 + P.rng() * 6, 2 + P.rng() * 5, { slot: 'D', shade: 140 + P.rng() * 40, alpha: 0.6, rough: 0.95, metal: 0.1, blur: 1 }); }),
-    S('blade', 128, 32, (P) => { P.fill('C', 200, { rough: 0.22, metal: 1 }); P.rect(0, P.h * 0.72, P.w, P.h * 0.28, { add: 60, rough: 0.12 }); P.grain('metal', 1); for (let i = 0; i < 12; i++) P.ellipse(P.rng() * P.w, P.rng() * P.h * 0.7, 3 + P.rng() * 5, 2 + P.rng() * 3, { slot: 'D', shade: 120, alpha: 0.5, rough: 0.8, metal: 0.2, blur: 1 }); }),
+    S('blade', 128, 32, (P) => { P.fill('C', 205, { rough: 0.32, metal: 0.7 }); P.rect(0, P.h * 0.72, P.w, P.h * 0.28, { add: 70, rough: 0.2 }); P.grain('metal', 1); for (let i = 0; i < 8; i++) P.ellipse(P.rng() * P.w, P.rng() * P.h * 0.7, 3 + P.rng() * 5, 2 + P.rng() * 3, { slot: 'D', shade: 140, alpha: 0.3, rough: 0.8, metal: 0.2, blur: 1 }); }),
     S('leatherGrip', 64, 64, (P) => { P.fill('B', 150, { rough: 0.6, metal: 0 }); for (let y = -64; y < 128; y += 9) P.line([[0, y], [P.w, y + 30]], { mul: 0.55, lw: 2.2, h: 60 }); P.grain('leather', 1); }),
     S('glowStrip', 32, 32, (P) => P.fill('D', 230, { rough: 0.2, metal: 0 })),
   ], { width: 256 });
@@ -53,7 +53,6 @@ const GUNS = {
   // semi-auto pistol: slide with serrations, frame, raked grip, trigger guard, sights
   auto(add) {
     const slide = rbox(0.034, 0.042, 0.2, 0.006, 1); move(slide, 0, 0.074, 0.06); add(slide, 'dark');
-    for (let i = 0; i < 6; i++) { const s = rbox(0.036, 0.03, 0.004, 0.001, 1); move(s, 0, 0.076, -0.03 + i * 0.008); add(s, 'steel'); }
     const port = rbox(0.002, 0.016, 0.04, 0.001, 1); move(port, 0.0175, 0.08, 0.06); add(port, 'steel');
     const frame = rbox(0.03, 0.026, 0.17, 0.005, 1); move(frame, 0, 0.044, 0.05); add(frame, 'polymer');
     const grip = rbox(0.031, 0.11, 0.048, 0.008, 1); xform(grip, mat(0, -0.008, -0.012, 0.28, 0, 0)); add(grip, 'polymer');

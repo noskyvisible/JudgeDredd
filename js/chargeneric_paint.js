@@ -112,7 +112,8 @@ export function paintFace(P, o) {
   const upY = mouthY - 3.2 * (o.lipK ?? 1), loY = mouthY + 4.2 * (o.lipK ?? 1);
   const smile = ex === 'grin' ? -2.5 : ex === 'frown' ? 2.5 : ex === 'snarl' ? -1 : 0;
   P.poly([[cx - mw, mouthY + smile * 0.6], [cx - mw * 0.45, upY - 0.4], [cx - 2.5, upY + 0.6], [cx, upY - 0.5], [cx + 2.5, upY + 0.6], [cx + mw * 0.45, upY - 0.4], [cx + mw, mouthY + smile * 0.6], [cx + mw * 0.5, loY], [cx, loY + 0.8], [cx - mw * 0.5, loY]], { slot: 'C', shade: o.lipShade ?? 175, h: 160, hA: 0.7, rough: 0.38 });
-  soft(P, cx, loY - 1, mw * 0.4, 1.4, 1.15);
+  P.poly([[cx - mw, mouthY + smile * 0.6], [cx - mw * 0.45, upY - 0.4], [cx - 2.5, upY + 0.6], [cx, upY - 0.5], [cx + 2.5, upY + 0.6], [cx + mw * 0.45, upY - 0.4], [cx + mw, mouthY + smile * 0.6]], { mul: 0.78 });
+  soft(P, cx, loY - 1.2, mw * 0.45, 1.6, 1.2);
   if (ex === 'grin' || ex === 'snarl') {
     const tY = mouthY, tw = ex === 'grin' ? mw * 0.8 : mw * 0.55, tx = ex === 'snarl' ? cx + 3 : cx;
     P.poly([[tx - tw, tY - 0.5], [tx + tw, tY - 0.5], [tx + tw * 0.8, tY + 2.4], [tx - tw * 0.8, tY + 2.4]], { slot: 'D', shade: 170, rough: 0.3 });
@@ -189,7 +190,7 @@ export function paintEye(P, o) {
   P.ellipse(cx - 3, cy - 1, 34, 15, { mul: o.sunken ? 0.5 : 0.74, blur: 9 });
   P.ellipse(cx - 2, cy - 12, 30, 7, { mul: 0.8, blur: 5 });
   if (o.bags || o.sunken) { P.ellipse(cx + 2, cy + 11, 26, 6, { mul: o.sunken ? 0.55 : 0.75, blur: 4 }); P.line([[cx - 20, cy + 9], [cx + 6, cy + 14], [cx + 26, cy + 9]], { mul: 0.7, lw: 1.2, h: 90 }); }
-  const ew = 28 * (o.w ?? 1), eh = 11 * (o.open ?? 1);
+  const ew = 31 * (o.w ?? 1), eh = 12.5 * (o.open ?? 1);
   const lidTilt = o.angry ? 3.5 : 0, droop = o.droop ? 2.5 : 0;
   // upper lid line from inner corner (left) to outer corner (right)
   const inner = [cx - ew, cy + 1.5], outer = [cx + ew, cy - 0.5 + (o.lift ?? 0) * -2 + droop];
@@ -210,7 +211,7 @@ export function paintEye(P, o) {
   // iris + pupil (clipped to the eye opening by drawing inside a clip path)
   const ctxs = [P.atlas.mx, P.atlas.hx, P.atlas.ox];
   for (const c of ctxs) { c.save(); c.beginPath(); eyePath(c); c.clip(); }
-  const ix = cx + (o.look ?? 0) * 6, iy = cy - 0.5, ir = 8.6 * (o.iris ?? 1);
+  const ix = cx + (o.look ?? 0) * 6, iy = cy - 0.5, ir = 9.6 * (o.iris ?? 1);
   P.ellipse(ix, iy, ir, ir, { slot: 'D', shade: o.irisShade ?? 92, rough: 0.1 });
   P.ellipse(ix, iy, ir, ir, { mul: 0.6, lw: 1.4 });
   for (let a = 0; a < 18; a++) { const t = a / 18 * TAU; P.line([[ix + Math.cos(t) * ir * 0.35, iy + Math.sin(t) * ir * 0.35], [ix + Math.cos(t) * ir * 0.9, iy + Math.sin(t) * ir * 0.9]], { add: 14, lw: 0.6, alpha: 0.7 }); }
@@ -316,10 +317,19 @@ function logo(P, kind, x, y, s, st) {
     default: P.ellipse(x, y, 0.4 * s, 0.4 * s, st);
   }
 }
+// organic 3-tone camouflage blobs (slot B blobs, darker slot A blobs, small slot C/B specks)
+function camo(P, o = {}) {
+  const w = P.w, h = P.h, n = Math.round((w * h) / (o.density ?? 1400));
+  const blob = (x, y, r, st) => { const pts = []; const k = 7 + Math.floor(P.rng() * 4); for (let i = 0; i < k; i++) { const a = i / k * Math.PI * 2, rr = r * (0.55 + P.rng() * 0.7); pts.push([x + Math.cos(a) * rr * 1.5, y + Math.sin(a) * rr]); } P.shape((c) => { c.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i <= k; i++) { const p0 = pts[i % k], pm = pts[(i - 1) % k]; c.quadraticCurveTo(pm[0], pm[1], (pm[0] + p0[0]) / 2, (pm[1] + p0[1]) / 2); } c.closePath(); }, st); };
+  for (let i = 0; i < n; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * (0.6 + P.rng()), { slot: o.slot1 || 'B', shade: 175 });
+  for (let i = 0; i < n * 0.8; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.7 * (0.5 + P.rng()), o.slot2 ? { slot: o.slot2, shade: 150 } : { slot: 'A', shade: 115 });
+  for (let i = 0; i < n * 0.6; i++) blob(P.rng() * w, P.rng() * h, (o.size ?? 10) * 0.3, { slot: o.slot1 || 'B', shade: 120 });
+}
 // generic torso garment painter
 export function paintTorso(P, o) {
   const w = P.w, h = P.h, U = (u) => u * w, V = (y) => (1 - VY(y)) * h;
   fabric(P, 'A', o.fabric || 'cotton', { shade: o.shade });
+  if (o.camo) { camo(P, o.camo); P.grain(o.fabric || 'cotton', 0.6); }
   // trim panels (slot B): shoulders / yoke / side panels
   if (o.yoke) P.rect(-4, 0, w + 8, V(o.yoke), { slot: 'B', shade: 180 });
   for (const pn of o.panels || []) P.poly(pn.pts.map(([u, y]) => [U(u), V(y)]), { slot: pn.slot || 'B', shade: pn.shade ?? 180, h: 140, hA: 0.4 });
@@ -361,6 +371,7 @@ export function paintTorso(P, o) {
 export function paintSleeve(P, o) {
   const w = P.w, h = P.h;
   fabric(P, 'A', o.fabric || 'cotton', { shade: o.shade });
+  if (o.camo) { camo(P, o.camo); P.grain(o.fabric || 'cotton', 0.6); }
   if (o.stripes) for (const s of o.stripes) P.rect(s.u0 * w, 0, (s.u1 - s.u0) * w, h, { slot: s.slot || 'C', shade: 186 });
   P.seam([[w * 0.75, -2], [w * 0.75, h + 2]]);
   P.seam([[w * 0.1, h * 0.48], [w * 0.4, h * 0.5]], { stitch: false, lw: 0.8 });
@@ -389,6 +400,7 @@ export function paintHood(P, o) {
 export function paintPelvis(P, o) {
   const w = P.w, h = P.h, U = (u) => u * w, V = (v) => (1 - v) * h;
   fabric(P, 'A', o.fabric || 'denim', { shade: o.shade });
+  if (o.camo) { camo(P, o.camo); P.grain(o.fabric || 'denim', 0.6); }
   // waistband
   P.rect(-4, 0, w + 8, h * 0.16, { mul: 0.93, h: 150, hA: 0.5 }); P.seam([[-2, h * 0.16], [w + 2, h * 0.16]]);
   if (o.loops) for (const u of [0.08, 0.25, 0.42, 0.58, 0.75, 0.92]) P.rect(U(u) - 2.5, 0, 5, h * 0.2, { mul: 0.85, h: 170 });
@@ -404,6 +416,7 @@ export function paintPelvis(P, o) {
 export function paintLeg(P, o) {
   const w = P.w, h = P.h, U = (u) => u * w, V = (v) => (1 - v) * h;
   fabric(P, 'A', o.fabric || 'denim', { shade: o.shade });
+  if (o.camo) { camo(P, o.camo); P.grain(o.fabric || 'denim', 0.6); }
   P.seam([[U(0.25), -2], [U(0.25), h + 2]]); P.seam([[U(0.75), -2], [U(0.75), h + 2]], { stitch: false });
   if (o.fade) { P.ellipse(U(0), V(0.75), U(0.14), h * 0.2, { add: 26, blur: 14 }); P.ellipse(U(1), V(0.75), U(0.14), h * 0.2, { add: 26, blur: 14 }); P.ellipse(U(0), V(0.46), U(0.12), h * 0.06, { add: 30, blur: 8 }); P.ellipse(U(1), V(0.46), U(0.12), h * 0.06, { add: 30, blur: 8 }); for (let i = 0; i < 5; i++) { const y = V(0.88 - i * 0.025); P.line([[U(0.02), y], [U(0.12), y - 2]], { add: 22, lw: 1.2, blur: 0.8 }); P.line([[U(0.98), y], [U(0.88), y - 2]], { add: 22, lw: 1.2, blur: 0.8 }); } }
   if (o.crease) { P.line([[U(0.0) + 1, 0], [U(0.0) + 1, h]], { add: 16, lw: 1.5 }); P.line([[w - 1, 0], [w - 1, h]], { add: 16, lw: 1.5 }); }
@@ -591,6 +604,8 @@ export function underAtlas() {
     S('legSlacks', 128, 320, paintLeg, { fabric: 'wool', crease: true, grime: 0.15 }),
     S('legRipped', 128, 320, paintLeg, { fabric: 'denim', fade: true, rips: 7, stains: 6, grime: 0.55 }),
     S('legPadded', 128, 320, paintLeg, { fabric: 'canvas', cargo: true, kneePanel: true, grime: 0.45 }),
+    S('legCamo', 128, 320, paintLeg, { fabric: 'canvas', cargo: true, camo: { slot1: 'B', slot2: 'C', size: 9 }, grime: 0.4 }),
+    S('pelvisCamo', 256, 80, paintPelvis, { fabric: 'canvas', loops: true, fly: true, frontPockets: true, backPockets: true, camo: { slot1: 'B', slot2: 'C', size: 9 } }),
     S('shirtPlain', 256, 160, paintShirt, { neck: 'crew' }),
     S('shirtPrint', 256, 160, paintShirt, { neck: 'crew', print: 'skull' }),
     S('shirtStripe', 256, 160, paintShirt, { stripes: 10 }),
