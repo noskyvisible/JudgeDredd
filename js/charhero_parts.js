@@ -102,7 +102,8 @@ export function buildFace(M) {
     m -= 0.0105 * gauss(y, ym, 0.0034) * mw;
     m += 0.005 * gauss(y, ym + 0.009, 0.0055) * mw + 0.0065 * gauss(y, ym - 0.011, 0.007) * mw;                    // lips
     m -= 0.0045 * gauss(y, -0.058, 0.01) * (1 - sstep(0.3, 0.5, A));                                               // under the lip
-    m += 0.014 * gauss(y, -0.09, 0.022) * (1 - sstep(0.35, 0.62, A));                                              // chin pad
+    m += 0.021 * gauss(y, -0.092, 0.024) * (1 - sstep(0.38, 0.66, A));                                             // chin pad
+    m += 0.007 * gauss(A, 0.64, 0.12) * gauss(y, -0.088, 0.02);                                                    // jaw angle
     m -= 0.0035 * gauss(a, 0, 0.035) * gauss(y, -0.092, 0.018);                                                    // cleft
     const t = clamp((0.056 - y) / 0.1, 0, 1), af = 0.25 + 0.25 * t, s = Math.sin(Math.PI * t);                       // nasolabial folds
     m += -0.0065 * gauss(A, af, 0.032) * s + 0.0055 * gauss(A, af + 0.085, 0.06) * s;
@@ -112,8 +113,8 @@ export function buildFace(M) {
   const S = new Surf([
     { y: -0.142, rx: 0.07, rz: 0.11, cz: 0.05 },
     { y: -0.128, rx: 0.108, rz: 0.15, cz: 0.04 },
-    { y: -0.105, rx: 0.132, rz: 0.168, cz: 0.035 },
-    { y: -0.07, rx: 0.152, rz: 0.176, cz: 0.028, e: 2.9 },
+    { y: -0.105, rx: 0.136, rz: 0.17, cz: 0.04, e: 3.3 },
+    { y: -0.07, rx: 0.155, rz: 0.177, cz: 0.03, e: 3.3 },
     { y: -0.03, rx: 0.176, rz: 0.18, cz: 0.022, e: 3.0 },
     { y: 0.02, rx: 0.19, rz: 0.182, cz: 0.02, e: 3.0 },
     { y: 0.07, rx: 0.2, rz: 0.18, cz: 0.018, e: 3.0 },
@@ -304,27 +305,31 @@ export function bootFootGeos(M, sx) {
   const out = [], P = (g, m) => { out.push([g, m]); return g; };
   // surface authored along +Y = forward; rotateX(+90deg) maps local y -> +z, local z -> -y (so cz < 0 lifts the section)
   const S = new Surf([
-    { y: -0.108, rx: 0.0, rz: 0.0, cz: -0.03 },
-    { y: -0.1, rx: 0.046, rz: 0.04, cz: -0.03 },
-    { y: -0.08, rx: 0.066, rz: 0.054, cz: -0.024 },
-    { y: -0.03, rx: 0.076, rz: 0.058, cz: -0.026 },
-    { y: 0.03, rx: 0.082, rz: 0.048, cz: -0.016 },
-    { y: 0.1, rx: 0.086, rz: 0.041, cz: -0.008 },
-    { y: 0.17, rx: 0.087, rz: 0.035, cz: -0.002 },
-    { y: 0.222, rx: 0.075, rz: 0.032, cz: 0.0 },
-    { y: 0.255, rx: 0.047, rz: 0.027, cz: 0.002 },
-    { y: 0.268, rx: 0.0, rz: 0.0, cz: 0.004 },
-  ], { e: 2.5 });
+    { y: -0.108, rx: 0.0, rz: 0.0, cz: -0.036 },
+    { y: -0.1, rx: 0.05, rz: 0.046, cz: -0.036 },
+    { y: -0.084, rx: 0.068, rz: 0.06, cz: -0.032 },
+    { y: -0.04, rx: 0.077, rz: 0.064, cz: -0.034 },
+    { y: 0.03, rx: 0.083, rz: 0.052, cz: -0.022 },
+    { y: 0.1, rx: 0.088, rz: 0.041, cz: -0.011 },
+    { y: 0.17, rx: 0.089, rz: 0.034, cz: -0.005 },
+    { y: 0.226, rx: 0.08, rz: 0.031, cz: -0.003 },
+    { y: 0.258, rx: 0.055, rz: 0.027, cz: -0.002 },
+    { y: 0.27, rx: 0.0, rz: 0.0, cz: -0.002 },
+  ], { e: 2.9 });
   const g = loftGeo(S, { ys: lin(-0.108, 0.268, 18), na: 30 });
   g.rotateX(Math.PI / 2); P(g, M.green);
-  // toe cap seam ridge
-  const toe = loftGeo(S, { ys: lin(0.13, 0.268, 7), na: 30, h: 0.003, a0: Math.PI - 1.6, a1: Math.PI + 1.6 });
-  toe.rotateX(Math.PI / 2); P(toe, M.green);
+  // toe cap + heel counter (darker reinforcement plates)
+  const toe = plateAY(S, [[Math.PI - 1.75, 0.14], [Math.PI + 1.75, 0.14], [Math.PI + 1.75, 0.262], [Math.PI - 1.75, 0.262]], { round: 0.02, t: 0.004, h0: 0.0, bevel: 0.002, n: 32, nI: 2, nB: 2 });
+  toe.rotateX(Math.PI / 2); P(toe, M.greenDark);
+  const heel = plateAY(S, [[Math.PI - 1.87, -0.1], [Math.PI + 1.87, -0.1], [Math.PI + 1.8, -0.045], [Math.PI - 1.8, -0.045]], { round: 0.015, t: 0.004, h0: 0.0, bevel: 0.002, n: 28, nI: 2, nB: 2 });
+  heel.rotateX(Math.PI / 2); P(heel, M.greenDark);
   // sole: midsole + outsole + lugs (rubber)
-  const outline = (k) => smoothPoly([[0, -0.116], [0.06, -0.106], [0.074, -0.06], [0.078, 0.0], [0.09, 0.08], [0.096, 0.16], [0.088, 0.23], [0.06, 0.272], [0, 0.284], [-0.06, 0.272], [-0.088, 0.23], [-0.096, 0.16], [-0.09, 0.08], [-0.078, 0.0], [-0.074, -0.06], [-0.06, -0.106]].map(([x, z]) => [x * k, -z * k + (k - 1) * 0.08]), 40);
+  const outline = (k) => smoothPoly([[0, -0.116], [0.06, -0.106], [0.074, -0.06], [0.078, 0.0], [0.09, 0.08], [0.096, 0.16], [0.088, 0.23], [0.06, 0.272], [0, 0.284], [-0.06, 0.272], [-0.088, 0.23], [-0.096, 0.16], [-0.09, 0.08], [-0.078, 0.0], [-0.074, -0.06], [-0.06, -0.106]].map(([x, z]) => [x * k, z * k - (k - 1) * 0.08]), 40);   // shape y = +z (rotateX(+90deg) maps it to +z)
   const slab = (k, depth, y, bev) => { const e = extrudeGeo(outline(k), depth, { bevel: bev, seg: 1 }); e.rotateX(Math.PI / 2); e.translate(0, y, 0); return e; };
-  P(slab(1.0, 0.012, -0.034, 0.004), M.rubber);
-  P(slab(0.985, 0.01, -0.05, 0.003), M.rubber);
+  P(slab(1.025, 0.006, -0.026, 0.002), M.greenDark);                       // stitched welt
+  P(slab(1.0, 0.012, -0.036, 0.004), M.rubber);                            // midsole
+  P(slab(0.985, 0.01, -0.051, 0.003), M.rubber);                           // outsole
+  P(xf(smoothBox(0.134, 0.014, 0.074, 0.006), new THREE.Matrix4().makeTranslation(0, -0.051, -0.07)), M.rubber);   // heel block
   const lugs = [];
   for (const [x, z] of [[-0.04, -0.085], [0.04, -0.085], [-0.045, -0.04], [0.045, -0.04], [0, -0.062], [-0.055, 0.1], [0.0, 0.1], [0.055, 0.1], [-0.058, 0.16], [0.0, 0.16], [0.058, 0.16], [-0.04, 0.22], [0.04, 0.22], [0.0, 0.255]]) {
     const b = new THREE.BoxGeometry(0.034, 0.008, 0.026); b.rotateY(0.35 * Math.sign(x || 1)); b.translate(x, -0.0565, z); lugs.push(b);

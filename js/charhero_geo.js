@@ -93,9 +93,11 @@ export class Surf {
 
 // ---------- grid -> geometry ----------
 // rows: array of arrays of Vector3 (each row same length). wrapU: rows are closed loops (last column == first)
-export function gridGeo(rows, { wrapU = false, uvs = null, flip = false } = {}) {
+// colour attribute convention for the hero: r = ambient occlusion (1 = open), g = edge-wear mask, b unused
+export function gridGeo(rows, { wrapU = false, uvs = null, flip = false, shade = null, cavity = 0 } = {}) {
   const R = rows.length, C = rows[0].length;
-  const pos = new Float32Array(R * C * 3), nor = new Float32Array(R * C * 3), uv = new Float32Array(R * C * 2);
+  const pos = new Float32Array(R * C * 3), nor = new Float32Array(R * C * 3), uv = new Float32Array(R * C * 2), col = new Float32Array(R * C * 3);
+  const avg = new THREE.Vector3();
   const du = new THREE.Vector3(), dv = new THREE.Vector3(), n = new THREE.Vector3();
   for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) {
     const k = i * C + j, p = rows[i][j];
@@ -115,6 +117,18 @@ export function gridGeo(rows, { wrapU = false, uvs = null, flip = false } = {}) 
     n.normalize(); if (flip) n.negate();
     nor[k * 3] = n.x; nor[k * 3 + 1] = n.y; nor[k * 3 + 2] = n.z;
     if (uvs) { uv[k * 2] = uvs[i][j][0]; uv[k * 2 + 1] = uvs[i][j][1]; }
+    let ao = 1, ed = 0;
+    if (shade) { const sv = shade(i, j); ao = sv[0]; ed = sv[1]; }
+    if (cavity && i > 0 && i < R - 1 && (wrapU || (j > 0 && j < C - 1))) {
+      // mean curvature from the 4-neighbourhood: k = 2 (P - avg).n / e^2  (1/m; + convex, - concave)
+      const a1 = rows[i][jm], a2 = rows[i][jp], b1 = rows[i - 1][j], b2 = rows[i + 1][j];
+      avg.set(0, 0, 0).add(a1).add(a2).add(b1).add(b2).multiplyScalar(0.25);
+      const e2 = (p.distanceToSquared(a1) + p.distanceToSquared(a2) + p.distanceToSquared(b1) + p.distanceToSquared(b2)) / 4;
+      const kc = (2 * ((p.x - avg.x) * n.x + (p.y - avg.y) * n.y + (p.z - avg.z) * n.z)) / Math.max(1e-8, e2);
+      ao *= clamp(1 + cavity * 0.004 * Math.min(0, kc), 0.45, 1);
+      ed = Math.max(ed, clamp((kc - 45) / 140, 0, 1) * cavity);
+    }
+    col[k * 3] = ao; col[k * 3 + 1] = ed;
   }
   const idx = [];
   for (let i = 0; i < R - 1; i++) for (let j = 0; j < C - 1; j++) {
@@ -125,6 +139,7 @@ export function gridGeo(rows, { wrapU = false, uvs = null, flip = false } = {}) 
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(idx);
   return g;
 }
@@ -185,7 +200,7 @@ export function loftGeo(surf, o = {}) {
     uvs = []; for (const y of ys) { const [a0, a1] = o.arc ? o.arc(y) : [o.a0 ?? 0, o.a1 ?? TAU]; const r = []; for (let j = 0; j <= na; j++) r.push(o.uvFn(a0 + (a1 - a0) * j / na, y)); uvs.push(r); }
     while (uvs.length < rows.length) { if (o.cap0 !== undefined && uvs.length < rows.length) uvs.unshift(uvs[0]); if (o.cap1 !== undefined && uvs.length < rows.length) uvs.push(uvs[uvs.length - 1]); }
   }
-  return gridGeo(rows, { wrapU: closed, uvs: uvs || gridUV(rows, o.uvScale ?? 1), flip: !!o.flip });
+  return gridGeo(rows, { wrapU: closed, uvs: uvs || gridUV(rows, o.uvScale ?? 1), flip: !!o.flip, cavity: o.cavity ?? 1 });
 }
 
 // skin a surface between two boundary curves ylo(a) .. yhi(a) (rows follow the boundaries exactly)
@@ -204,7 +219,7 @@ export function loftBetween(surf, ylo, yhi, o = {}) {
     }
     rows.push(row);
   }
-  return gridGeo(rows, { wrapU: closed, uvs: gridUV(rows, o.uvScale ?? 1), flip: !!o.flip });
+  return gridGeo(rows, { wrapU: closed, uvs: gridUV(rows, o.uvScale ?? 1), flip: !!o.flip, cavity: o.cavity ?? 1 });
 }
 
 // plate from an outline given in absolute surface coordinates [[a, y], ...] (optionally smoothed through the points)
@@ -317,28 +332,30 @@ export function plateGeo(surf, shape, o = {}) {
   const r = closed ? t / 2 : Math.min(o.bevel ?? t * 0.6, t * 0.98);
   const inner = insetPoly(pts, r);
   const dome = (s) => crown * (1 - s * s);
+  // each ring: [polygon, lift, ambient occlusion, edge-wear]
   if (closed) {
     const hb = h0, ht = h0 + t, hc = h0 + t / 2;
-    rings.push([[[gx, gy]], hb - dome(0) * 0.3]);
-    for (let j = 1; j < nI; j++) { const s = j / nI; rings.push([scaleRing(inner, s), hb - dome(s) * 0.3]); }
-    for (let k = 0; k <= 2 * nB; k++) { const th = -Math.PI / 2 + (k / (2 * nB)) * Math.PI; rings.push([insetPoly(pts, r * (1 - Math.cos(th))), hc + r * Math.sin(th)]); }
-    for (let j = nI - 1; j >= 1; j--) { const s = j / nI; rings.push([scaleRing(inner, s), ht + dome(s)]); }
-    rings.push([[[gx, gy]], ht + dome(0)]);
+    rings.push([[[gx, gy]], hb - dome(0) * 0.3, 0.55, 0]);
+    for (let j = 1; j < nI; j++) { const s = j / nI; rings.push([scaleRing(inner, s), hb - dome(s) * 0.3, 0.55, 0]); }
+    for (let k = 0; k <= 2 * nB; k++) { const th = -Math.PI / 2 + (k / (2 * nB)) * Math.PI; rings.push([insetPoly(pts, r * (1 - Math.cos(th))), hc + r * Math.sin(th), 0.55 + 0.45 * (th / Math.PI + 0.5), Math.cos(th) * 0.9]); }
+    for (let j = nI - 1; j >= 1; j--) { const s = j / nI; rings.push([scaleRing(inner, s), ht + dome(s), 1, 0]); }
+    rings.push([[[gx, gy]], ht + dome(0), 1, 0]);
   } else {
-    rings.push([pts, h0 - sink]);
-    for (let k = 0; k <= nB; k++) { const th = (k / nB) * Math.PI / 2; rings.push([insetPoly(pts, r * (1 - Math.cos(th))), h0 + t - r + r * Math.sin(th)]); }
-    for (let j = nI - 1; j >= 1; j--) { const s = j / nI; rings.push([scaleRing(inner, s), h0 + t + dome(s)]); }
-    rings.push([[[gx, gy]], h0 + t + dome(0)]);
+    rings.push([pts, h0 - sink, 0.3, 0]);
+    for (let k = 0; k <= nB; k++) { const th = (k / nB) * Math.PI / 2; rings.push([insetPoly(pts, r * (1 - Math.cos(th))), h0 + t - r + r * Math.sin(th), 0.62 + 0.38 * Math.sin(th), 0.35 + 0.65 * Math.sin(2 * th) * (k < nB ? 1 : 0.5)]); }
+    for (let j = nI - 1; j >= 1; j--) { const s = j / nI; rings.push([scaleRing(inner, s), h0 + t + dome(s), 1, 0]); }
+    rings.push([[[gx, gy]], h0 + t + dome(0), 1, 0]);
   }
   // to 3D
-  const P = [], UV = [], nrm = new THREE.Vector3();
+  const P = [], UV = [], SH = [], nrm = new THREE.Vector3();
   let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
   for (const [x, y] of pts) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
   const us = o.uvScale ?? 1;
   const ringStart = [];
-  for (const [poly, h] of rings) {
+  for (const [poly, h, rao, red] of rings) {
     ringStart.push(P.length);
     for (const [x, y] of poly) {
+      SH.push(rao, red);
       const a = ca + x / Ra, yy = cy + y / Ry;
       const v = surf.pos(a, yy); surf.nrm(a, yy, nrm);
       const hh = h + (o.hfn ? o.hfn(a, yy, x, y) : 0);
@@ -354,19 +371,20 @@ export function plateGeo(surf, shape, o = {}) {
     else if (nb === 1) { for (let i = 0; i < na; i++) idx.push(A + i, A + ((i + 1) % na), B); }
     else for (let i = 0; i < na; i++) { const i2 = (i + 1) % na; idx.push(A + i, A + i2, B + i2, A + i, B + i2, B + i); }
   }
-  const g = toGeo(P, UV, idx);
+  const g = toGeo(P, UV, idx, SH);
   // orient so the front faces along the surface normal
   orientTo(g, surf.nrm(ca + gx / Ra, cy + gy / Ry), ringStart[rings.length - 1]);
   g.computeVertexNormals();
   return g;
 }
 
-function toGeo(P, UV, idx) {
-  const pos = new Float32Array(P.length * 3), uv = new Float32Array(P.length * 2);
-  P.forEach((p, i) => { pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z; uv[i * 2] = UV[i][0]; uv[i * 2 + 1] = UV[i][1]; });
+function toGeo(P, UV, idx, SH = null) {
+  const pos = new Float32Array(P.length * 3), uv = new Float32Array(P.length * 2), col = new Float32Array(P.length * 3);
+  P.forEach((p, i) => { pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z; uv[i * 2] = UV[i][0]; uv[i * 2 + 1] = UV[i][1]; col[i * 3] = SH ? SH[i * 2] : 1; col[i * 3 + 1] = SH ? SH[i * 2 + 1] : 0; });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(idx);
   return g;
 }
@@ -393,11 +411,11 @@ export function bandGeo(surf, y0, y1, o = {}) {
   const rows = [], n = new THREE.Vector3();
   const profAt = (ya, yb, k1) => {
     const tt = t * k1, bb = (o.bulge || 0) * k1;
-    const r = Math.max(1e-5, Math.min(o.r ?? tt * 0.5, tt * 0.98, (yb - ya) * 0.48)), prof = [[ya, h0 - sink]];
-    for (let k = 0; k <= nc; k++) { const th = (k / nc) * Math.PI / 2; prof.push([ya + r - Math.cos(th) * r, h0 + tt - r + Math.sin(th) * r]); }
-    if (o.bulge) { const m = o.bulgeSeg ?? 3; for (let k = 1; k < m; k++) { const s = k / m; prof.push([ya + r + (yb - ya - 2 * r) * s, h0 + tt + bb * Math.sin(Math.PI * s)]); } }
-    for (let k = 0; k <= nc; k++) { const th = Math.PI / 2 + (k / nc) * Math.PI / 2; prof.push([yb - r - Math.cos(th) * r, h0 + tt - r + Math.sin(th) * r]); }
-    prof.push([yb, h0 - sink]);
+    const r = Math.max(1e-5, Math.min(o.r ?? tt * 0.5, tt * 0.98, (yb - ya) * 0.48)), prof = [[ya, h0 - sink, 0.3, 0]];
+    for (let k = 0; k <= nc; k++) { const th = (k / nc) * Math.PI / 2; prof.push([ya + r - Math.cos(th) * r, h0 + tt - r + Math.sin(th) * r, 0.6 + 0.4 * Math.sin(th), Math.sin(2 * th) * 0.8 + 0.2]); }
+    if (o.bulge) { const m = o.bulgeSeg ?? 3; for (let k = 1; k < m; k++) { const s = k / m; prof.push([ya + r + (yb - ya - 2 * r) * s, h0 + tt + bb * Math.sin(Math.PI * s), 1, 0]); } }
+    for (let k = 0; k <= nc; k++) { const th = Math.PI / 2 + (k / nc) * Math.PI / 2; prof.push([yb - r - Math.cos(th) * r, h0 + tt - r + Math.sin(th) * r, 0.6 + 0.4 * Math.sin(th), Math.abs(Math.sin(2 * th)) * 0.8 + 0.2]); }
+    prof.push([yb, h0 - sink, 0.3, 0]);
     return prof;
   };
   const cols = [];
@@ -414,7 +432,7 @@ export function bandGeo(surf, y0, y1, o = {}) {
     rows.push(row);
   }
   // rows run bottom->top (+y), columns run +a: same orientation as loftGeo -> outward normals
-  const g = gridGeo(rows, { wrapU: closed, uvs: gridUV(rows, o.uvScale ?? 1) });
+  const g = gridGeo(rows, { wrapU: closed, uvs: gridUV(rows, o.uvScale ?? 1), shade: (i, j) => [cols[j][1][i][2], cols[j][1][i][3]] });
   return g;
 }
 
@@ -477,7 +495,7 @@ export function mergeGeos(list) {
   // indexed merge (all inputs indexed with position/normal/uv)
   let nv = 0, ni = 0;
   for (const g of list) { if (!g.index) { const c = g.attributes.position.count, ix = []; for (let i = 0; i < c; i++) ix.push(i); g.setIndex(ix); } nv += g.attributes.position.count; ni += g.index.count; }
-  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), idx = new Uint32Array(ni);
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), col = new Float32Array(nv * 3), idx = new Uint32Array(ni);
   let ov = 0, oi = 0;
   for (const g of list) {
     const c = g.attributes.position.count;
@@ -485,11 +503,13 @@ export function mergeGeos(list) {
     if (!g.attributes.normal) g.computeVertexNormals();
     nor.set(g.attributes.normal.array, ov * 3);
     if (g.attributes.uv) uv.set(g.attributes.uv.array, ov * 2);
+    if (g.attributes.color) col.set(g.attributes.color.array, ov * 3); else for (let i = 0; i < c; i++) col[(ov + i) * 3] = 1;
     const ia = g.index.array; for (let i = 0; i < ia.length; i++) idx[oi + i] = ia[i] + ov;
     ov += c; oi += ia.length;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   return g;
 }
@@ -570,4 +590,59 @@ export function chainGeo(path, { link = 0.022, wire = 0.0055, tube = 5, rad = 10
     parts.push(g);
   }
   return mergeGeos(parts);
+}
+
+// Same strategy as charkit.bake (one merged mesh per material per joint) but keeps the (ao, edge) colour attribute.
+export function bakeHero(group) {
+  const buckets = new Map();
+  for (const child of [...group.children]) {
+    if (!child.isMesh || child.userData.noBake) continue;
+    child.updateMatrix();
+    const g = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+    g.applyMatrix4(child.matrix);
+    for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color'].includes(name)) g.deleteAttribute(name);
+    const n = g.attributes.position.count;
+    if (!g.attributes.normal) g.computeVertexNormals();
+    if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+    if (!g.attributes.color) { const c = new Float32Array(n * 3); for (let i = 0; i < n; i++) c[i * 3] = 1; g.setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+    if (!buckets.has(child.material)) buckets.set(child.material, []);
+    buckets.get(child.material).push(g);
+    group.remove(child); child.geometry.dispose();
+  }
+  for (const [m, arr] of buckets) {
+    const mesh = new THREE.Mesh(mergeIndexless(arr), m); mesh.castShadow = true; group.add(mesh);
+  }
+}
+function mergeIndexless(arr) {
+  let n = 0; for (const g of arr) n += g.attributes.position.count;
+  const out = new THREE.BufferGeometry();
+  for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 3]]) {
+    const a = new Float32Array(n * size); let o = 0;
+    for (const g of arr) { a.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
+    out.setAttribute(name, new THREE.BufferAttribute(a, size));
+  }
+  return out;
+}
+// Multiply baked AO (colour.r) by the occlusion of analytic sphere proxies, evaluated in the rest pose.
+// proxies: [{ c: Vector3 (rig space), r, skip: Set of labels it must not darken }]; label(mesh) -> label of the mesh's joint
+export function proxyOcclusion(root, meshes, proxies, label, k = 1) {
+  root.updateMatrixWorld(true);
+  const p = new THREE.Vector3(), nn = new THREE.Vector3(), d = new THREE.Vector3(), inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  for (const mesh of meshes) {
+    const lab = label(mesh), list = proxies.filter((q) => !q.skip.has(lab));
+    if (!list.length) continue;
+    const m = new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld), nm = new THREE.Matrix3().getNormalMatrix(m);
+    const P = mesh.geometry.attributes.position, N = mesh.geometry.attributes.normal, C = mesh.geometry.attributes.color;
+    for (let i = 0; i < P.count; i++) {
+      p.fromBufferAttribute(P, i).applyMatrix4(m); nn.fromBufferAttribute(N, i).applyMatrix3(nm).normalize();
+      let occ = 0;
+      for (const q of list) {
+        d.subVectors(q.c, p); const dist = d.length(); if (dist < 1e-4) continue;
+        const cos = (d.x * nn.x + d.y * nn.y + d.z * nn.z) / dist; if (cos <= 0) continue;
+        const rr = q.r / Math.max(dist, q.r * 1.02); occ += cos * rr * rr;
+      }
+      C.setX(i, C.getX(i) * Math.max(0.35, 1 - k * occ));
+    }
+    C.needsUpdate = true;
+  }
 }

@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { patchRim } from './shaders.js';
-import { bake } from './charkit.js';
 import { eagleShape } from './world.js';
 import { heroTextures, ATLAS, atlasUV } from './charhero_tex.js';
 import {
-  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX,
+  Surf, loftGeo, plateGeo, plateAY, bandGeo, sweepGeo, rimGeo, chainGeo, driven, extrudeGeo, rivetGeo, frame, xf, deform, mirrorX, bakeHero, proxyOcclusion,
   rrect, ellipse, roundPoly, sstep, gauss, lin, wrapA, TAU, V,
 } from './charhero_geo.js';
 import { buildHelmet, buildFace, fistGeos, ribbedPauldron, eaglePauldron, bootFootGeos, smoothBox } from './charhero_parts.js';
@@ -18,6 +17,46 @@ import { buildHelmet, buildFace, fistGeos, ribbedPauldron, eaglePauldron, bootFo
 // limb's rotation, so armour stays seated through extreme poses.  Each joint's static parts are baked
 // into one mesh per material (bake()).
 // ===========================================================================
+
+// On top of patchRim: baked vertex AO (colour.r) darkens albedo and the indirect specular / clearcoat / sheen,
+// and an edge-wear mask (colour.g) scuffs plate edges (tint + roughness, and thins the clearcoat).
+function patchHero(mat, { edgeTint = 0.3, edgeRough = 0.2, aoSpec = 0.85, aoAlbedo = 0.65 } = {}) {
+  const prev = mat.onBeforeCompile;
+  mat.vertexColors = true;
+  mat.onBeforeCompile = (shader, renderer) => {
+    if (prev) prev(shader, renderer);
+    shader.uniforms.uEdgeTint = { value: edgeTint }; shader.uniforms.uEdgeRough = { value: edgeRough };
+    shader.uniforms.uAOSpec = { value: aoSpec }; shader.uniforms.uAOAlbedo = { value: aoAlbedo };
+    shader.fragmentShader = 'uniform float uEdgeTint; uniform float uEdgeRough; uniform float uAOSpec; uniform float uAOAlbedo;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>', `float heroAO = 1.0, heroEdge = 0.0;
+#if defined( USE_COLOR )
+  heroAO = vColor.r; heroEdge = vColor.g;
+#endif
+diffuseColor.rgb *= mix( 1.0, heroAO, uAOAlbedo );
+diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * ( 1.0 + 3.0 * uEdgeTint ) + vec3( 0.035 * uEdgeTint ), heroEdge );`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = clamp( roughnessFactor + uEdgeRough * heroEdge, 0.04, 1.0 );`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+#ifdef USE_CLEARCOAT
+  material.clearcoat *= 1.0 - 0.55 * heroEdge * step( 0.0, uEdgeRough );
+  material.clearcoatRoughness = clamp( material.clearcoatRoughness + 0.6 * max( uEdgeRough, 0.0 ) * heroEdge, 0.05, 1.0 );
+#endif`)
+      .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+{
+  float sao = mix( 1.0, heroAO, uAOSpec );
+  reflectedLight.indirectSpecular *= sao;
+  reflectedLight.indirectDiffuse *= mix( 1.0, heroAO, 0.5 );
+  #ifdef USE_CLEARCOAT
+    clearcoatSpecularIndirect *= sao;
+  #endif
+  #ifdef USE_SHEEN
+    sheenSpecularIndirect *= sao;
+  #endif
+}`);
+  };
+  mat.customProgramCacheKey = () => 'rim-v1+hero-ao-v1';
+  return mat;
+}
 
 function heroMaterials() {
   const T = heroTextures();
@@ -51,6 +90,9 @@ function heroMaterials() {
       emissive: 0x2a1a04, emissiveMap: T.decal.map, emissiveIntensity: 0.3, envMapIntensity: 1.5 }),
   };
   for (const k of ['suit', 'under', 'helmet', 'gold', 'goldDark', 'green', 'greenDark', 'skin', 'metal']) patchRim(M[k], 0x7aa6ff, 3.2, k === 'gold' || k === 'goldDark' ? 0.22 : 0.32);
+  // edge wear per material: scuffed lacquer on black, rubbed-bright leather on green, polished edges on gold
+  const wear = { suit: [0.45, 0.22], under: [0.2, 0.15], helmet: [0.35, 0.18], gold: [0.22, -0.12], goldDark: [0.35, -0.12], green: [0.5, 0.18], greenDark: [0.45, 0.18], skin: [0.0, 0.0], metal: [0.6, -0.1], rubber: [0.25, 0.1], visor: [0.0, 0.0] };
+  for (const [k, [et, er]] of Object.entries(wear)) patchHero(M[k], { edgeTint: et, edgeRough: er, aoAlbedo: k === 'visor' ? 0.3 : 0.65 });
   return M;
 }
 
@@ -83,6 +125,7 @@ export function buildHero(ch, st) {
   ], { e: 2.3, mod: (a, y) => 0.013 * (gauss(wrapA(a - Math.PI), 0.42, 0.3) + gauss(wrapA(a - Math.PI), -0.42, 0.3)) * gauss(y, -0.1, 0.05) });
   put(hips, loftGeo(pelvis, { ys: lin(-0.215, 0.15, 14), na: 44, cap0: 0.01 }), M.suit);
   put(hips, bandGeo(pelvis, -0.045, 0.085, { t: 0.03, r: 0.012, na: 64 }), M.green);
+  for (const y of [-0.035, 0.075]) put(hips, bandGeo(pelvis, y - 0.0035, y + 0.0035, { t: 0.003, h0: 0.03, r: 0.0014, na: 48, nc: 1 }), M.greenDark);
   // eagle-shield buckle
   put(hips, plateGeo(pelvis, rrect(0.19, 0.145, 0.024), { center: [0, 0.02], t: 0.018, h0: 0.03, bevel: 0.007, crown: 0.004 }), M.gold);
   put(hips, atlasUV(plateGeo(pelvis, rrect(0.15, 0.112, 0.014), { center: [0, 0.02], t: 0.003, h0: 0.05, bevel: 0.0012, uv: 'box', n: 40, nI: 2 }), ATLAS.buckle), M.decal);
@@ -245,7 +288,8 @@ export function buildHero(ch, st) {
       return 0.012 * gauss(a, 0.15 * sx, 0.55) * gauss(y, -0.2, 0.12)        // quads
         + 0.01 * gauss(a, -sx * 0.75, 0.3) * gauss(y, -0.38, 0.06)           // vastus medialis
         + 0.01 * gauss(Math.abs(wrapA(a - Math.PI)), 0.3, 0.4) * gauss(y, -0.15, 0.12)   // hamstrings
-        - 0.003 * gauss(out, 0, 0.05);                                        // outer seam
+        - 0.005 * gauss(out, 0, 0.045) - 0.0035 * gauss(wrapA(a + sx * Math.PI / 2), 0, 0.045)   // outer + inner seams
+        - 0.004 * (gauss(y, -0.17, 0.008) + gauss(y, -0.29, 0.008)) * Math.max(0, Math.cos(a - 0.15 * sx)) ** 2;   // quilted front panel
     };
     const th = new Surf([
       { y: -0.53, rx: 0.098, rz: 0.104 },
@@ -258,7 +302,7 @@ export function buildHero(ch, st) {
       { y: 0.12, rx: 0.094, rz: 0.104, cz: -0.006, cx: -sx * 0.01 },
       { y: 0.148, rx: 0.0, rz: 0.0, cx: -sx * 0.008 },
     ], { e: 2.15, mod: thighMod });
-    put(hp, loftGeo(th, { ys: [...lin(-0.53, 0.07, 14), 0.1, 0.12, 0.136, 0.148], na: 36 }), M.suit);
+    put(hp, loftGeo(th, { ys: [...lin(-0.53, -0.36, 4), -0.33, -0.3, -0.29, -0.28, -0.25, -0.21, -0.18, -0.17, -0.16, -0.13, -0.08, -0.03, 0.02, 0.07, 0.1, 0.12, 0.136, 0.148], na: 36 }), M.suit);
     // knee cop: helper joint with half the knee bend
     const kc = driven(hp, (g) => { g.position.set(0, -0.46, 0); g.rotation.set(kn.rotation.x * 0.5, 0, 0); }, 'knee' + side);
     groups.push(kc);
@@ -268,7 +312,7 @@ export function buildHero(ch, st) {
     for (const [a, y] of [[-0.62, -0.06], [0.62, -0.06], [-0.62, 0.08], [0.62, 0.08]]) put(kc, xf(rivetGeo(0.009, 0.65, 8), frame(kS.at(a, y, 0.047), kS.nrm(a, y))), M.gold);
     put(kc, bandGeo(kS, 0.02, 0.05, { t: 0.008, r: 0.003, a0: 1.0, a1: TAU - 1.0, na: 16, nc: 2 }), M.greenDark);
     // shin (mostly inside the boot) + tall green boot
-    put(kn, loftGeo(new Surf([{ y: -0.44, rx: 0.07, rz: 0.075 }, { y: -0.16, rx: 0.098, rz: 0.11, cz: -0.02 }, { y: 0.02, rx: 0.098, rz: 0.102 }, { y: 0.08, rx: 0.084, rz: 0.088 }], { e: 2.1 }), { ys: lin(-0.3, 0.08, 6), na: 28 }), M.under);
+    put(kn, loftGeo(new Surf([{ y: -0.2, rx: 0.088, rz: 0.094, cz: -0.012 }, { y: -0.06, rx: 0.095, rz: 0.102, cz: -0.008 }, { y: 0.02, rx: 0.098, rz: 0.102 }, { y: 0.08, rx: 0.084, rz: 0.088 }], { e: 2.1 }), { ys: lin(-0.2, 0.08, 5), na: 28 }), M.under);   // knee region above the boot (kept inside the shaft)
     const bS = new Surf([
       { y: -0.45, rx: 0.075, rz: 0.08, cz: 0.004 },
       { y: -0.38, rx: 0.078, rz: 0.084 },
@@ -302,5 +346,24 @@ export function buildHero(ch, st) {
     }
   }
 
-  for (const g of groups) bake(g);
+  for (const g of groups) bakeHero(g);
+  // large-scale occlusion between body parts (armpits, under the pauldrons, inner thighs, under the chin) from sphere proxies
+  const lab = new Map();
+  for (const [k, v] of Object.entries({ hips, torso, chest, neck, head })) lab.set(v, k);
+  for (const S of ['L', 'R']) for (const k of ['sh', 'el', 'hand', 'hip', 'kn', 'an']) lab.set(ch[k + S], k + S);
+  for (const g of groups) if (g.name) lab.set(g, g.name);
+  const sp = (x, y, z, r, ...skip) => ({ c: V(x, y, z), r, skip: new Set(skip) });
+  const proxies = [
+    sp(0, 1.16, -0.01, 0.25, 'torso', 'chest'), sp(0, 1.4, 0.0, 0.3, 'torso', 'chest'), sp(0, 1.63, -0.012, 0.33, 'torso', 'chest'),
+    sp(0, 0.96, -0.01, 0.25, 'hips'), sp(0, 2.1, -0.01, 0.24, 'head', 'neck'), sp(0, 1.88, -0.02, 0.12, 'neck', 'head', 'chest'),
+  ];
+  for (const [S, sx] of [['L', 1], ['R', -1]]) proxies.push(
+    sp(sx * 0.535, 1.62, 0, 0.13, 'sh' + S, 'couter' + S, 'pauldron' + S), sp(sx * 0.53, 1.46, 0.006, 0.112, 'sh' + S, 'couter' + S),
+    sp(sx * 0.52, 1.24, 0, 0.098, 'el' + S, 'hand' + S, 'couter' + S), sp(sx * 0.52, 1.1, 0, 0.082, 'el' + S, 'hand' + S),
+    sp(sx * 0.6, 1.93, -0.005, 0.2, 'pauldron' + S, 'sh' + S),
+    sp(sx * 0.165, 0.82, 0.01, 0.148, 'hip' + S, 'knee' + S, 'hips'), sp(sx * 0.17, 0.62, 0.015, 0.13, 'hip' + S, 'knee' + S),
+    sp(sx * 0.17, 0.32, -0.012, 0.1, 'kn' + S, 'knee' + S, 'an' + S), sp(sx * 0.17, 0.16, 0, 0.08, 'kn' + S, 'an' + S),
+  );
+  const meshes = []; for (const g of groups) for (const c of g.children) if (c.isMesh) meshes.push(c);
+  proxyOcclusion(ch.rigRoot, meshes, proxies, (m) => lab.get(m.parent) || '', 0.8);
 }
