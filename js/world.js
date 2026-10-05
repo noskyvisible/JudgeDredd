@@ -210,23 +210,38 @@ export const world = {
 
     // ===== sky & fog =====
     scene.background = new THREE.Color(0x120a1c);
-    scene.fog = new THREE.FogExp2(0x1c1030, 0.0026);
+    scene.fog = new THREE.FogExp2(0x26143a, 0.0029);
     this.skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
       uniforms: { time: { value: 0 }, flash: { value: 0 } },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+      // smog sky: a magenta-orange light-pollution glow at the horizon rising into violet and indigo, two drifting cloud decks that are
+      // lit from below by the city (warm) and from above by lightning, plus a faint distant aurora-like neon haze
       fragmentShader: `varying vec3 vP; uniform float time; uniform float flash;
         float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
         float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+        float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
         void main(){
           vec3 d = normalize(vP); float y = d.y;
-          vec3 hor = vec3(0.55,0.2,0.28), mid = vec3(0.12,0.05,0.2), top = vec3(0.025,0.02,0.07);
-          vec3 c = mix(hor, mid, smoothstep(-0.05,0.35,y)); c = mix(c, top, smoothstep(0.3,0.9,y));
-          vec2 uv = d.xz/(abs(y)+0.35)*2.0 + vec2(time*0.01, 0.0);
-          float cl = n(uv*2.0)*0.5 + n(uv*5.0)*0.3 + n(uv*11.0)*0.2;
-          c *= 0.55 + cl*0.9;
-          c += vec3(0.4,0.4,0.6)*flash*(0.3+cl);
-          gl_FragColor = vec4(c,1.0);
+          vec3 hor = vec3(0.95, 0.32, 0.36), mid = vec3(0.20, 0.07, 0.30), top = vec3(0.025, 0.02, 0.09);
+          float up = clamp(y, 0.0, 1.0);
+          vec3 c = mix(hor, mid, pow(smoothstep(-0.04, 0.55, y), 0.5));
+          c = mix(c, top, smoothstep(0.28, 1.0, up));
+          c += vec3(0.5, 0.16, 0.2) * exp(-abs(y) * 14.0) * 0.55;                          // glow right at the horizon
+          // two cloud decks, projected onto planes so they converge toward the horizon
+          float ay = max(abs(y), 0.035);
+          vec2 u1 = d.xz / (ay + 0.12) * 1.15 + vec2(time * 0.012, time * 0.004);
+          vec2 u2 = d.xz / (ay + 0.30) * 0.7 - vec2(time * 0.006, -time * 0.003) + 31.7;
+          float c1 = fbm(u1 * 1.6), c2 = fbm(u2 * 1.9);
+          float cov1 = smoothstep(0.42, 0.78, c1), cov2 = smoothstep(0.48, 0.82, c2) * 0.7;
+          float below = smoothstep(0.0, 0.35, 1.0 - up);                                   // low clouds catch the city glow, high ones stay dark
+          vec3 glow = mix(vec3(0.16, 0.07, 0.2), vec3(0.95, 0.38, 0.34), below * below) * (0.35 + 0.65 * c1);
+          c = mix(c, glow, cov1 * 0.85);
+          c = mix(c, vec3(0.10, 0.06, 0.16) + vec3(0.35, 0.13, 0.2) * below, cov2 * 0.55);
+          // lightning lights the cloud decks from within
+          c += vec3(0.5, 0.55, 0.9) * flash * (0.2 + 1.3 * (cov1 + cov2 * 0.6) * (0.4 + c1));
+          c *= 0.85 + 0.15 * step(0.0, y);
+          gl_FragColor = vec4(c, 1.0);
         }`,
     });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), this.skyMat);
@@ -267,6 +282,20 @@ export const world = {
     const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 });
     const signTex = TX.makeSignAtlas();
     const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15) });
+    // neon life: every sign breathes slightly; a few are faulty and stutter / drop out
+    signMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.timeU;
+      shader.vertexShader = 'attribute float sid; varying float vSid;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSid = sid;');
+      shader.fragmentShader = 'uniform float uTime; varying float vSid;\n' + shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+{
+  float tt = uTime * (5.0 + vSid * 9.0) + vSid * 91.0;
+  float glitch = smoothstep(0.5, 0.62, sin(tt) * sin(tt * 1.73 + 3.0) * 0.5 + 0.5);
+  float faulty = step(0.8, vSid);
+  float k = mix(1.0, 0.18 + 0.82 * glitch, faulty) * (0.93 + 0.07 * sin(uTime * 2.1 + vSid * 40.0));
+  diffuseColor.rgb *= k;
+}`);
+    };
+    signMat.customProgramCacheKey = () => 'sign-flicker';
     this.signMat = signMat;
     const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
     const shopMat = new THREE.MeshBasicMaterial({ map: TX.makeShopTex(), vertexColors: true, toneMapped: false });
@@ -329,7 +358,7 @@ export const world = {
       const uv = g.attributes.uv;
       const col = idx % TX.SIGN_COLS, row = Math.floor(idx / TX.SIGN_COLS);
       for (let k = 0; k < 4; k++) uv.setXY(k, (col + uv.getX(k)) / TX.SIGN_COLS, 1 - (row + 1 - uv.getY(k)) / TX.SIGN_ROWS);
-      g.rotateY(ry); g.translate(x, y, z); signG.push(g);
+      g.rotateY(ry); g.translate(x, y, z); { const hh = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; g.setAttribute('sid', new THREE.BufferAttribute(new Float32Array(4).fill(hh - Math.floor(hh)), 1)); } signG.push(g);   // per-sign id from its position (no rng draw: the city layout must not shift)
     };
 
     // ===== roads =====
@@ -917,35 +946,41 @@ export const world = {
   },
 
   buildRain(scene) {
-    // light drizzle: sparse, thin streaks that fade with distance; the density breathes slowly
-    const n = 2600, size = 80;
-    const pos = new Float32Array(n * 2 * 3), end = new Float32Array(n * 2), seed = new Float32Array(n * 2);
-    for (let i = 0; i < n; i++) {
-      const x = rand(size), y = rand(60), z = rand(size), s = Math.random();
-      pos.set([x, y, z, x, y, z], i * 6); end[i * 2] = 0; end[i * 2 + 1] = 1; seed[i * 2] = seed[i * 2 + 1] = s;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('end', new THREE.BufferAttribute(end, 1)); geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+    // instanced camera-facing streaks (GL lines are 1 px and vanish at high resolution): wind-leaned, stretched along their fall, soft edged,
+    // thicker and fainter with distance; the density breathes slowly (level)
+    const n = 6500, size = 84;
+    const base = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.setAttribute('position', base.attributes.position); geo.setAttribute('uv', base.attributes.uv);
+    const iPos = new Float32Array(n * 3), iSeed = new Float32Array(n);
+    for (let i = 0; i < n; i++) { iPos.set([rand(size), rand(60), rand(size)], i * 3); iSeed[i] = Math.random(); }
+    geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(iPos, 3)); geo.setAttribute('iSeed', new THREE.InstancedBufferAttribute(iSeed, 1));
+    geo.instanceCount = n;
     this.rainLevel = 0.3;
     this.rainMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { time: { value: 0 }, cam: { value: new THREE.Vector3() }, size: { value: size }, level: { value: this.rainLevel } },
-      vertexShader: `attribute float end; attribute float seed; uniform float time; uniform vec3 cam; uniform float size; uniform float level; varying float vA;
+      vertexShader: `attribute vec3 iPos; attribute float iSeed; uniform float time; uniform vec3 cam; uniform float size; uniform float level; varying float vA; varying vec2 vUv;
+        float h1(float x){ return fract(sin(x * 91.3458) * 47453.5453); }
         void main(){
-          if (seed > level) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
-          vec3 p = position; float H = 60.0;
-          p.y = mod(p.y - time*38.0, H);
-          p.x += time*2.0;
-          vec3 w = cam + (mod(p - cam + vec3(size*0.5, 30.0, size*0.5), vec3(size, H, size)) - vec3(size*0.5, 30.0, size*0.5));
+          vUv = uv;
+          if (iSeed > level) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
+          float speed = 30.0 + 16.0 * h1(iSeed);
+          float H = 60.0;
+          vec3 p = iPos; p.y = mod(p.y - time * speed, H); p.x += time * 2.2;
+          vec3 w = cam + (mod(p - cam + vec3(size * 0.5, 30.0, size * 0.5), vec3(size, H, size)) - vec3(size * 0.5, 30.0, size * 0.5));
           w.y = max(0.0, w.y);
-          float dist = length(w - cam);
-          w += end * vec3(-0.08, 1.05, 0.0);
-          vA = 0.2 * (1.0 - end*0.7) * (1.0 - smoothstep(25.0, 48.0, dist)) * smoothstep(1.5, 5.0, dist);
-          gl_Position = projectionMatrix * viewMatrix * vec4(w,1.0);
+          vec3 toCam = cam - w; float dist = length(toCam); toCam /= max(dist, 1e-3);
+          vec3 vel = normalize(vec3(-0.13, -1.0, 0.02));
+          vec3 side = normalize(cross(vel, toCam));
+          float len = 0.7 + 0.9 * h1(iSeed + 3.1);
+          float width = (0.022 + 0.022 * h1(iSeed + 7.7)) * (1.0 + dist * 0.05);
+          vec3 wp = w + side * (position.x * width) - vel * ((position.y + 0.5) * len);
+          vA = (0.62 - 0.2 * h1(iSeed + 1.7)) * (1.0 - smoothstep(26.0, 52.0, dist)) * smoothstep(0.9, 3.5, dist) / (1.0 + dist * 0.012);
+          gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
         }`,
-      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(0.62,0.74,1.0,vA); }',
+      fragmentShader: 'varying float vA; varying vec2 vUv; void main(){ float e = 1.0 - pow(abs(vUv.x * 2.0 - 1.0), 1.6); float t = 0.25 + 0.75 * vUv.y; gl_FragColor = vec4(vec3(0.62, 0.74, 1.0) * 1.1, vA * e * t); }',
     });
-    const rain = new THREE.LineSegments(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain); (this.mirrorHide ||= []).push(rain);
+    const rain = new THREE.Mesh(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain); (this.mirrorHide ||= []).push(rain);
   },
 
   buildFlyers(scene) {
