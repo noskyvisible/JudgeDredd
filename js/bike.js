@@ -61,7 +61,7 @@ export class Lawmaster {
     const c = this.ctrl;
     const fx_ = Math.sin(this.yaw), fz_ = Math.cos(this.yaw), rx = fz_, rz = -fx_;
     let vf = this.vx * fx_ + this.vz * fz_, vl = this.vx * rx + this.vz * rz;
-    const maxV = 78, maxB = 118;
+    const maxV = 78, maxB = 118 * (G.player && G.player.rank >= 5 ? 1.2 : 1);
     this.boosting = c.boost && this.boostE > 0.02 && c.throttle > 0;
     if (c.hold) { c.throttle = 0; c.brake = 0; c.boost = false; vf *= Math.exp(-3.5 * dt); this.boosting = false; }
     const accel = 36 + (this.boosting ? 62 : 0);

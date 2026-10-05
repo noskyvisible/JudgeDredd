@@ -10,8 +10,12 @@ import { ridePose } from './bike.js';
 import { clamp, lerp, damp, dampAngle, angDiff, rand, deg, chance, TAU, smooth } from './util.js';
 
 export const RANKS = [
-  { name: 'ROOKIE JUDGE', cred: 0 }, { name: 'STREET JUDGE', cred: 250 }, { name: 'SENIOR STREET JUDGE', cred: 700 },
-  { name: 'JUDGE MARSHAL', cred: 1500 }, { name: 'CHIEF JUDGE CANDIDATE', cred: 3000 }, { name: 'LIVING LEGEND', cred: 6000 },
+  { name: 'ROOKIE JUDGE', cred: 0, perk: null },
+  { name: 'STREET JUDGE', cred: 250, perk: 'SCAVENGER — ammo pickups give +50%' },
+  { name: 'SENIOR STREET JUDGE', cred: 700, perk: 'HARDENED — armour recharges much faster' },
+  { name: 'JUDGE MARSHAL', cred: 1500, perk: 'RIPOSTE — counters restore 10 health' },
+  { name: 'CHIEF JUDGE CANDIDATE', cred: 3000, perk: 'RELENTLESS — Judgement finisher charges at 6 combo' },
+  { name: 'LIVING LEGEND', cred: 6000, perk: 'OVERDRIVE — Lawmaster boost is 20% stronger' },
 ];
 const COMBO_SEQ = ['slashR', 'slashL', 'kick', 'thrust', 'gunbutt', 'overhead'];
 const ATK = {
@@ -101,6 +105,7 @@ export class Player {
     this.hp -= a; this.noDamageT = 0;
     this.combo = type === 'fire' ? this.combo : 0; this.comboT = 0;
     G.hud?.damageFlash(Math.min(1, amount / 30));
+    if (dir && type !== 'fire' && type !== 'crash' && G.mode === 'foot') G.hud?.hitDir(-dir.x, -dir.z);
     if (type !== 'fire') { audio.hurt(); fx.shake(Math.min(1, amount / 25)); }
     if (dir && G.mode === 'foot') { this.vel.x += dir.x * 5; this.vel.z += dir.z * 5; }
     if (type === 'melee' || type === 'bullet') {
@@ -127,7 +132,7 @@ export class Player {
     let r = 0; for (let i = 0; i < RANKS.length; i++) if (this.cred >= RANKS[i].cred) r = i;
     if (r > this.rank) {
       this.rank = r; this.maxHp += 15; this.hp = this.maxHp; this.armor = this.maxArmor; this.dmgBonus += 0.1;
-      G.hud?.banner('RANK UP', RANKS[r].name, 'rank'); audio.ui('rank'); audio.voice('Rank up.');
+      G.hud?.banner('RANK UP', RANKS[r].name + (RANKS[r].perk ? '  ·  PERK: ' + RANKS[r].perk : ''), 'rank'); audio.ui('rank'); audio.voice('Rank up.');
     }
     if (label) G.hud?.feed(`${n > 0 ? '+' : ''}${n} CRED  ${label}`, n >= 0 ? 'good' : 'bad');
     this.save();
@@ -207,7 +212,8 @@ export class Player {
       audio.baton(A.heavy, p);
       G.hud?.hitMarker(false);
       this.addCombo(A.finisher ? 3 : 1);
-      if (this.combo >= 8 && !this.finisherReady && this.combo % 8 === 0) { this.finisherReady = true; G.hud?.banner('JUDGEMENT READY', 'Attack to unleash the finisher', 'good'); audio.ui('rank'); }
+      const fin = this.rank >= 4 ? 6 : 8;
+      if (this.combo >= fin && !this.finisherReady && this.combo % fin === 0) { this.finisherReady = true; G.hud?.banner('JUDGEMENT READY', 'Attack to unleash the finisher', 'good'); audio.ui('rank'); }
     }
     if (hits) { fx.hitstop(A.heavy ? 0.1 : 0.05); fx.shake(A.heavy ? 0.7 : 0.25); if (A.finisher) { const g0 = new THREE.Vector3(this.pos.x, 0.3, this.pos.z); fx.ring(g0, 0xffd24a, 16, 0.6); fx.ring(g0, 0xffffff, 9, 0.35); fx.shake(1.4); fx.arcBurst(g0.clone().setY(1.1), 4.5, 12, 0xffd890, 0.22); fx.spark(g0, 40, 0xffd24a, 20, 0.9); fx.decal(new THREE.Vector3(this.pos.x, 0.02, this.pos.z), new THREE.Vector3(0, 1, 0), 2, 6); fx.flash(g0.clone().setY(1.4), 0xffd890, 8, 0.25, 22); } }
     else { this.combo = this.combo; audio.whoosh(this.pos); }
@@ -223,7 +229,7 @@ export class Player {
     this.stateT += dt; this.fireCool -= dt; this.counterCool -= dt; this.iframes -= dt; this.noDamageT += dt; this.perfectT = Math.max(0, this.perfectT - dt);
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) { this.combo = 0; this.finisherReady = false; } }
     if (this.noDamageT > 6 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + 4 * dt);
-    if (this.noDamageT > 10 && this.armor < this.maxArmor) this.armor = Math.min(this.maxArmor, this.armor + 3 * dt);
+    if (this.noDamageT > (this.rank >= 2 ? 4 : 10) && this.armor < this.maxArmor) this.armor = Math.min(this.maxArmor, this.armor + (this.rank >= 2 ? 9 : 3) * dt);
     this.heatPulse = Math.max(0, this.heatPulse - dt);
 
     // camera input
@@ -376,7 +382,7 @@ export class Player {
     this.ch.play('counter', { speed: 1.2 });
     fx.slowmo(0.35, 0.45); fx.text(best.pos.clone().setY(best.pos.y + 2.6), 'COUNTER!', 'crit'); audio.counter(best.pos);
     fx.ring(best.centre().clone(), 0x60d0ff, 4, 0.3, G.camera.position.clone().sub(best.pos).normalize());
-    this.stats.counters++; this.addCombo(2);
+    this.stats.counters++; this.addCombo(2); if (this.rank >= 3) { this.heal(10); fx.text(this.centre().clone().setY(this.pos.y + 2.0), '+10 RIPOSTE', 'good'); }
     this.finishAttackVisual();
   }
 

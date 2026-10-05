@@ -18,6 +18,7 @@ export const TYPES = {
   brute: { style: 'brute', hp: 190, speed: 3.3, melee: true, dmg: 24, tele: 0.9, cool: [2.4, 3.8], weapon: 'bat', armor: true, superarmor: true, label: 'BRUTE', scaleWeapon: 1.5 },
   junkie: { style: 'junkie', hp: 50, speed: 7.2, melee: true, dmg: 7, tele: 0.3, cool: [0.7, 1.5], weapon: null, label: 'SLO-MO JUNKIE' },
   boss: { style: 'boss', hp: 480, speed: 3.8, melee: true, dmg: 28, tele: 0.8, cool: [1.4, 2.4], weapon: 'bat', armor: true, superarmor: true, boss: true, slam: true, label: 'BLOCK BOSS', scaleWeapon: 2 },
+  sniper: { style: 'gunman', hp: 40, speed: 3.6, ranged: true, dmg: 20, tele: 1.25, cool: [3.4, 5.2], weapon: 'pistol', snipe: true, range: 24, keep: 20, fireR: 52, aggroR: 70, label: 'SNIPER' },
   meek: { style: 'civ', hp: 30, speed: 5.5, meek: true, dmg: 0, label: 'OFFENDER' },
 };
 const EN_AMMO = { id: 'enemy', color: 0xff8030, speed: 46, dmg: 8, bounces: 0 };
@@ -45,7 +46,10 @@ export class Enemy {
     this.T = T; this.type = typeName;
     this.ch = new Character(T.style, T.style === 'civ' ? { armor: pick([0x6a3a3a, 0x3a6a4a, 0x4a4a7a, 0x7a6a3a]), hair: pick([0x222222, 0x6a4a2a, 0xaa8a4a, 0x888888]) } : {});
     this.pos = pos.clone(); this.yaw = rand(0, Math.PI * 2); this.vel = new THREE.Vector3();
-    this.maxHp = T.hp; this.hp = T.hp;
+    // difficulty scales gently with the player's rank (hostiles only)
+    const rk = T.meek ? 0 : (G.player?.rank || 0);
+    this.dmgMul = 1 + rk * 0.07;
+    this.maxHp = Math.round(T.hp * (1 + rk * 0.1)); this.hp = this.maxHp;
     this.state = 'idle'; this.stateT = 0; this.cool = rand(0.5, 2); this.threat = false;
     this.scale = this.ch.style.scale;
     this.hostile = !T.meek;
@@ -214,7 +218,7 @@ export class Enemy {
     switch (this.state) {
       case 'idle': {
         if (!this.hostile) { this.faceYaw(Math.atan2(toP.x, toP.z), 2, dt); if (dist < 40 && pl.alive) this.setState('flee'); break; }
-        const aggroR = T.ranged ? 55 : 32;
+        const aggroR = T.aggroR || (T.ranged ? 55 : 32);
         if ((dist < aggroR && pl.alive) || this.aggro) { this.aggro = true; this.scene?.alert(); this.setState('engage'); }
         else this.faceYaw(this.yaw + Math.sin(G.time * 0.5 + this.hitCount) * 0.01, 2, dt);
         break;
@@ -243,10 +247,11 @@ export class Enemy {
         } else if (T.ranged) {
           const los = !world.rayBoxes(this.centre().clone(), pl.centre());
           this.strafeT -= dt; if (this.strafeT < 0) { this.strafeDir *= -1; this.strafeT = rand(1, 2.5); }
-          if (dist < 8) { _v.copy(toP).multiplyScalar(-1); this.moveDir(_v, T.speed, dt); this.walking = T.speed; }
-          else if (dist > 17 || !los) { this.moveDir(toP, T.speed, dt); this.walking = T.speed; }
+          const keep = T.keep || 8, rng = T.range || 17;
+          if (dist < keep) { _v.copy(toP).multiplyScalar(-1); this.moveDir(_v, T.speed, dt); this.walking = T.speed; }
+          else if (dist > rng || !los) { this.moveDir(toP, T.speed, dt); this.walking = T.speed; }
           else { _v.set(-toP.z * this.strafeDir, 0, toP.x * this.strafeDir); this.moveDir(_v, T.speed * 0.6, dt); this.walking = T.speed * 0.6; }
-          if (this.cool <= 0 && los && dist < 30 && G.enemies.request(this, 'ranged')) this.beginTelegraph();
+          if (this.cool <= 0 && los && dist < (T.fireR || 30) && G.enemies.request(this, 'ranged')) this.beginTelegraph();
         }
         break;
       }
@@ -347,7 +352,7 @@ export class Enemy {
     const from = this.muzzle ? this.muzzle.getWorldPosition(new THREE.Vector3()) : this.centre().clone();
     const target = pl.centre().clone(); target.x += rand(-0.8, 0.8); target.y += rand(-0.3, 0.3); target.z += rand(-0.8, 0.8);
     const dir = target.sub(from).normalize();
-    weapons.fire('enemy', from, dir, { ...EN_AMMO, dmg: this.T.dmg }, { spread: 0.015 });
+    weapons.fire('enemy', from, dir, { ...EN_AMMO, dmg: this.T.dmg * this.dmgMul, speed: this.T.snipe ? 90 : EN_AMMO.speed }, { spread: this.T.snipe ? 0.004 : 0.015 });
     fx.muzzle(from, dir, 0xff9040);
     audio.enemyShot(from);
     this.releaseToken();
@@ -355,7 +360,7 @@ export class Enemy {
   drawLaser() {
     const pl = G.player; const from = this.muzzle ? this.muzzle.getWorldPosition(_v) : this.centre();
     const to = pl.centre();
-    const n = 12; for (let i = 0; i < n; i += 3) {
+    const n = this.T.snipe ? 24 : 12; for (let i = 0; i < n; i += this.T.snipe ? 1 : 3) {
       const t = i / n; fx.add.emit(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t, from.z + (to.z - from.z) * t, 0, 0, 0, 3, 0.1, 0.1, 0.5, 0.12, 0.05, 0, 0, 0);
     }
   }
@@ -368,7 +373,7 @@ export class Enemy {
     const ang = Math.abs(angDiff(this.yaw, Math.atan2(pl.pos.x - this.pos.x, pl.pos.z - this.pos.z)));
     if (d < reach && (ang < 1.1 || this.T.slam)) {
       const dir = new THREE.Vector3(pl.pos.x - this.pos.x, 0, pl.pos.z - this.pos.z).normalize();
-      pl.damage(this.T.dmg, dir, 'melee', this);
+      pl.damage(this.T.dmg * this.dmgMul, dir, 'melee', this);
       fx.impact(pl.centre(), 8, 0xff6040);
     }
   }

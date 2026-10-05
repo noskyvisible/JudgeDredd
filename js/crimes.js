@@ -25,6 +25,8 @@ export const CRIMES = {
   armedrobbery: { name: 'Armed Robbery', statute: 'Theft Act §14', tier: 4 },
   slomo: { name: 'Slo-Mo Dealing', statute: 'Narcotics §31', tier: 4 },
   weapons: { name: 'Illegal Weapons Possession', statute: 'Arms Act §22', tier: 4 },
+  rioting: { name: 'Rioting', statute: 'Public Order §58', tier: 3 },
+  attemptedmurder: { name: 'Attempted Murder of a Judge', statute: 'Persons Act §2', tier: 6 },
   arson: { name: 'Arson', statute: 'Property Code §44', tier: 5 },
   hostage: { name: 'Hostage-Taking', statute: 'Persons Act §17', tier: 5 },
   gangwar: { name: 'Gang Violence', statute: 'Public Order §60', tier: 5 },
@@ -40,15 +42,17 @@ export const SCENARIOS = {
   vandals: { title: 'Vandalism', sev: 2, w: 3, minRank: 0, time: 180, desc: 'Gang of kids spraying graffiti on a Block wall.', perps: [{ t: 'meek', crimes: ['vandalism'] }, { t: 'meek', crimes: ['vandalism'] }, { t: 'meek', crimes: ['vandalism', 'noise'] }] },
   brawl: { title: 'Street Brawl', sev: 2, w: 4, minRank: 0, time: 180, desc: 'A mob is beating a citizen. Respond.', perps: [{ t: 'thug', crimes: ['assault'] }, { t: 'thug', crimes: ['assault'] }, { t: 'thug', crimes: ['assault'] }], victims: 1 },
   hotdog: { title: 'Hotdogger!', sev: 2, w: 3, minRank: 0, time: 240, desc: 'Reckless rider tearing through the sector. Run him down.', chase: true },
+  riot: { title: 'Slurp Shortage Riot', sev: 3, w: 3, minRank: 1, time: 190, desc: 'A crowd is smashing a Slurp-O-Mat. Agitators are stirring them up.', perps: [{ t: 'thug', crimes: ['rioting', 'assault'] }, { t: 'thug', crimes: ['rioting'] }, { t: 'thug', crimes: ['rioting'] }, { t: 'meek', crimes: ['rioting', 'vandalism'] }, { t: 'meek', crimes: ['rioting'] }, { t: 'meek', crimes: ['rioting', 'noise'] }], reinforce: [{ t: 'junkie', crimes: ['rioting'] }, { t: 'junkie', crimes: ['rioting', 'assault'] }] },
   mugging: { title: 'Mugging in progress', sev: 3, w: 4, minRank: 1, time: 160, desc: 'Armed muggers have cornered a citizen.', perps: [{ t: 'thug', crimes: ['mugging'] }, { t: 'gunman', crimes: ['mugging', 'weapons'] }], victims: 1 },
   robbery: { title: 'Armed Robbery', sev: 3, w: 4, minRank: 1, time: 160, desc: 'Gunmen are holding up a Slurp-O-Mat.', perps: [{ t: 'gunman', crimes: ['armedrobbery'] }, { t: 'gunman', crimes: ['armedrobbery'] }, { t: 'thug', crimes: ['armedrobbery'] }], victims: 2 },
   slomo: { title: 'Slo-Mo Dealers', sev: 3, w: 3, minRank: 1, time: 170, desc: 'Dealers are moving Slo-Mo on the street.', perps: [{ t: 'junkie', crimes: ['slomo'] }, { t: 'junkie', crimes: ['slomo'] }, { t: 'gunman', crimes: ['slomo', 'weapons'] }] },
-  weapons: { title: 'Black-Market Arms Deal', sev: 4, w: 3, minRank: 2, time: 180, desc: 'Illegal weapons exchange. Heavily armed.', perps: [{ t: 'gunman', crimes: ['weapons'] }, { t: 'gunman', crimes: ['weapons'] }, { t: 'brute', crimes: ['weapons'] }] },
+  weapons: { title: 'Black-Market Arms Deal', sev: 4, w: 3, minRank: 2, time: 180, desc: 'Illegal weapons exchange. Heavily armed.', perps: [{ t: 'gunman', crimes: ['weapons'] }, { t: 'gunman', crimes: ['weapons'] }, { t: 'brute', crimes: ['weapons'] }], reinforce: [{ t: 'gunman', crimes: ['weapons'] }, { t: 'brute', crimes: ['weapons', 'assault'] }] },
   arson: { title: 'Arson Attack', sev: 4, w: 3, minRank: 2, time: 170, desc: 'Fire-starters torching a Block entrance.', perps: [{ t: 'thug', crimes: ['arson'] }, { t: 'thug', crimes: ['arson'] }, { t: 'junkie', crimes: ['arson'] }], fires: 3 },
   hostage: { title: 'Hostage Situation', sev: 4, w: 3, minRank: 2, time: 150, desc: 'Gunmen have taken a citizen hostage.', perps: [{ t: 'gunman', crimes: ['hostage', 'weapons'] }, { t: 'gunman', crimes: ['hostage'] }], hostages: 1 },
-  gangwar: { title: 'Gang War', sev: 5, w: 3, minRank: 3, time: 200, desc: 'Rival gangs are tearing the intersection apart.', perps: [{ t: 'thug', crimes: ['gangwar'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar', 'weapons'] }, { t: 'gunman', crimes: ['gangwar'] }, { t: 'brute', crimes: ['gangwar', 'assault'] }] },
+  sniper: { title: 'Sniper Nest', sev: 4, w: 2, minRank: 2, time: 170, desc: 'Snipers are picking off citizens from the rooftops. Watch for the laser sights — dodge!', perps: [{ t: 'sniper', crimes: ['attemptedmurder', 'weapons'], far: true }, { t: 'sniper', crimes: ['attemptedmurder'], far: true }, { t: 'gunman', crimes: ['weapons'] }] },
+  gangwar: { title: 'Gang War', sev: 5, w: 3, minRank: 3, time: 200, desc: 'Rival gangs are tearing the intersection apart.', perps: [{ t: 'thug', crimes: ['gangwar'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar', 'weapons'] }, { t: 'gunman', crimes: ['gangwar'] }, { t: 'brute', crimes: ['gangwar', 'assault'] }], reinforce: [{ t: 'gunman', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar', 'weapons'] }, { t: 'thug', crimes: ['gangwar'] }] },
   bomb: { title: 'Terrorist Bomb Threat', sev: 5, w: 3, minRank: 3, time: 220, desc: 'Armed fanatics have planted a bomb. Defuse it!', perps: [{ t: 'gunman', crimes: ['terrorism'] }, { t: 'gunman', crimes: ['terrorism'] }, { t: 'brute', crimes: ['terrorism'] }], bomb: true },
-  boss: { title: 'Block Boss', sev: 5, w: 2, minRank: 4, time: 240, desc: 'A Block Boss and his crew have seized the street.', perps: [{ t: 'boss', crimes: ['gangwar', 'assault', 'weapons'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar'] }] },
+  boss: { title: 'Block Boss', sev: 5, w: 2, minRank: 4, time: 240, desc: 'A Block Boss and his crew have seized the street.', perps: [{ t: 'boss', crimes: ['gangwar', 'assault', 'weapons'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'thug', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar'] }], reinforce: [{ t: 'brute', crimes: ['gangwar', 'assault'] }, { t: 'gunman', crimes: ['gangwar'] }, { t: 'gunman', crimes: ['gangwar', 'weapons'] }] },
 };
 
 const SEV_COL = [0, 0x60c0ff, 0x70ff90, 0xffe040, 0xff9030, 0xff3030];
@@ -79,9 +83,9 @@ class CrimeScene {
   spawn() {
     this.spawned = true;
     const def = this.def;
-    const spot = (r0 = 3, r1 = 9) => { const a = rand(0, 6.28), r = rand(r0, r1); return new THREE.Vector3(this.pos.x + clamp(Math.cos(a) * r, -9, 9), 0, this.pos.z + clamp(Math.sin(a) * r, -9, 9)); };
+    const spot = (r0 = 3, r1 = 9) => { const a = rand(0, 6.28), r = rand(r0, r1), c = Math.max(9, r1); const v = new THREE.Vector3(this.pos.x + clamp(Math.cos(a) * r, -c, c), 0, this.pos.z + clamp(Math.sin(a) * r, -c, c)); if (c > 9) world.collideCircle(v, 0.8); return v; };
     if (def.perps) def.perps.forEach((p) => {
-      const e = new Enemy(p.t, spot(), { crimes: p.crimes, scene: this }); G.enemies.add(e); this.perps.push(e);
+      const e = new Enemy(p.t, p.far ? spot(20, 28) : spot(), { crimes: p.crimes, scene: this }); G.enemies.add(e); this.perps.push(e);
       if (p.t === 'meek') { e.hostile = false; }
     });
     if (def.victims) for (let i = 0; i < def.victims; i++) { const c = G.civs.spawnVictim(spot(2, 6)); this.victims.push(c); }
@@ -123,8 +127,27 @@ class CrimeScene {
   check() {
     if (this.state === 'resolved' || this.state === 'failed') return;
     if (this.def.chase && !this.perps.length) return;
+    const fighting = this.perps.filter((e) => !e.removed && !e.judged && e.state !== 'dead' && !e.judgeable && e.hostile);
+    if (!fighting.length && this.def.reinforce && !this.reinforced) { this.reinforced = true; return this.callBackup(); }
+    if (!fighting.length && !this.cleared && this.perps.some((e) => e.hostile)) {
+      this.cleared = true; fx.slowmo(0.35, 0.7);
+      if (this.perps.some((e) => e.judgeable)) G.hud?.feed('ALL HOSTILES DOWN — JUDGE THE SURVIVORS', 'good');
+    }
     const open = this.perps.filter((e) => !e.removed && !e.judged && e.state !== 'dead');
     if (!open.length) this.complete();
+  }
+  callBackup() {
+    const ps = this.def.reinforce;
+    G.hud?.banner('BACKUP INBOUND', 'Perp reinforcements arriving!', 'bad'); audio.ui('error'); audio.voice('They have reinforcements.', { pitch: 0.4 });
+    ps.forEach((p, i) => {
+      setTimeout(() => {
+        if (this.state === 'resolved' || this.state === 'failed') return;
+        const a = rand(0, 6.28), r = rand(16, 22); const v = new THREE.Vector3(this.pos.x + Math.cos(a) * r, 0, this.pos.z + Math.sin(a) * r); world.collideCircle(v, 0.8);
+        const e = new Enemy(p.t, v, { crimes: p.crimes, scene: this }); e.aggro = true; G.enemies.add(e); this.perps.push(e);
+        fx.ring(v.clone().setY(0.2), 0xff4030, 5, 0.5); fx.flash(v.clone().setY(1.5), 0xff6040, 4, 0.3, 16);
+      }, 600 + i * 450);
+    });
+    this.cleared = false;
   }
   complete() {
     this.state = 'resolved';
@@ -133,6 +156,8 @@ class CrimeScene {
     const bonus = Math.round(this.sev * 25 * (1 - 0.6 * deadFrac));
     const lvl = this.sev * 6;
     G.player.addCred(bonus, `CASE CLOSED — ${this.title.toUpperCase()}`);
+    if (this.dead === 0 && this.perps.length) { const cb = this.sev * 12; G.player.addCred(cb, 'CLEAN ARREST — NO FATALITIES'); }
+    if (this.timeLeft > this.time * 0.6) { const sp = this.sev * 8; G.player.addCred(sp, 'RAPID RESPONSE'); }
     G.player.stats.crimes++;
     G.crimes.crimeLevel = Math.max(0, G.crimes.crimeLevel - lvl);
     G.hud?.banner('CASE CLOSED', this.title, 'good'); audio.ui('confirm');

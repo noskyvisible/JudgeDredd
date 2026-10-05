@@ -50,6 +50,11 @@ export const hud = {
   damageFlash(a) { el.vignette.style.transition = 'none'; el.vignette.style.opacity = String(0.4 + a * 0.6); requestAnimationFrame(() => { el.vignette.style.transition = 'opacity .6s'; el.vignette.style.opacity = '0'; }); },
   hitMarker(crit) { const h = el.hitmark; h.className = ''; void h.offsetWidth; h.className = 'on' + (crit ? ' crit' : ''); },
   comboPop() { el.combonum.classList.add('pop'); setTimeout(() => el.combonum.classList.remove('pop'), 80); },
+  hitDir(sx, sz) {
+    const cy = G.player.camYaw, fw = sx * Math.sin(cy) + sz * Math.cos(cy), rt = -sx * Math.cos(cy) + sz * Math.sin(cy);
+    const a = document.createElement('div'); a.className = 'hitdir'; a.style.transform = `rotate(${Math.atan2(rt, fw)}rad)`;
+    el.hud.appendChild(a); setTimeout(() => a.remove(), 900);
+  },
   warn() { el.warn.className = ''; void el.warn.offsetWidth; el.warn.className = 'on'; },
   fired(a) {
     const s = this.slots?.[AMMO.indexOf(a)]; if (s) { s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
@@ -202,7 +207,7 @@ export const hud = {
     el.mapscreen.classList.toggle('hidden', !open);
     G.mapOpen = open; if (open) this.bigMap();
   },
-  showPause(v) { el.pause.classList.toggle('hidden', !v); if (v) { const p = G.player; el.stats.innerHTML = `ARRESTS ${p.stats.arrests} · PERFECT VERDICTS ${p.stats.perfect} · KILLS ${p.stats.kills}<br>COUNTERS ${p.stats.counters} · FINISHERS ${p.stats.finishers} · BEST COMBO ${p.bestCombo}`; } },
+  showPause(v) { el.pause.classList.toggle('hidden', !v); if (v) { const p = G.player; el.stats.innerHTML = `ARRESTS ${p.stats.arrests} · PERFECT VERDICTS ${p.stats.perfect} · KILLS ${p.stats.kills}<br>COUNTERS ${p.stats.counters} · FINISHERS ${p.stats.finishers} · BEST COMBO ${p.bestCombo}<br>PERKS: ${RANKS.slice(1, p.rank + 1).map((r) => r.perk.split(' — ')[0]).join(' · ') || 'none yet'}`; } },
   showDeath(v) { el.death.classList.toggle('hidden', !v); },
 };
 

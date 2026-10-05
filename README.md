@@ -72,7 +72,18 @@ Use a desktop browser with WebGL2 (Chrome / Edge / Firefox). Click **Enter the s
 
 Jaywalking / littering → *fine* · smoking → *30 days* · vandalism, hotdogging → *1 year* · assault → *2 years* ·
 mugging, armed robbery, Slo-Mo dealing, illegal weapons → *5 years* · arson, hostage-taking, gang violence → *10 years* ·
-kidnap → *20 years* · terrorism → *life*. Higher-tier scenarios (hostages, bombs, gang wars, Block Bosses) unlock as your rank rises.
+kidnap → *20 years* · terrorism → *life*. rioting → *2 years* · attempted murder of a Judge → *20 years*.
+Higher-tier scenarios (hostages, bombs, gang wars, snipers, Block Bosses) unlock as your rank rises.
+
+### Escalation, bonuses and perks
+
+- **Rank scales the opposition** — perps get ~10% more health and ~7% more damage per rank.
+- **Snipers** (*Sniper Nest*, rank 2+) shoot from 20 m+ away. A long laser-sight telegraph warns you — dodge it.
+- **Backup** — Riots, Arms Deals, Gang Wars and Block Boss scenes call in a reinforcement wave once the first wave is down.
+- **Bonuses** — *Clean Arrest* (no fatalities) and *Rapid Response* (arrive early) add Street Cred on top of the case bonus.
+- **Rank perks** — Street Judge: ammo pickups +50% · Senior: fast armour recharge · Marshal: counters heal 10 ·
+  Chief Candidate: finisher charges at 6 combo · Living Legend: Lawmaster boost +20%.
+- A red arc around the crosshair points toward whoever just hit you.
 
 ## Code map
 

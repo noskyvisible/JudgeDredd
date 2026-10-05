@@ -30,7 +30,7 @@ export class Pickups {
       const d = Math.hypot(pl.pos.x - p.m.position.x, pl.pos.z - p.m.position.z);
       if (d < 2.4 && pl.alive) {
         if (p.kind === 'health') { if (pl.hp >= pl.maxHp - 1) continue; pl.heal(35); fx.text(p.m.position, '+HEALTH', 'good'); }
-        else { const a = AMMO[p.ammoIdx]; const n = Math.max(2, Math.round(a.count / 2)); pl.ammo[p.ammoIdx] = Math.min(a.count * 2, pl.ammo[p.ammoIdx] + n); fx.text(p.m.position, `+${n} ${a.short}`, 'good'); G.hud?.flashAmmo(p.ammoIdx); }
+        else { const a = AMMO[p.ammoIdx]; const n = Math.max(2, Math.round(a.count / 2 * (pl.rank >= 1 ? 1.5 : 1))); pl.ammo[p.ammoIdx] = Math.min(a.count * 2, pl.ammo[p.ammoIdx] + n); fx.text(p.m.position, `+${n} ${a.short}`, 'good'); G.hud?.flashAmmo(p.ammoIdx); }
         audio.ui('pickup'); fx.burst(p.m.position, 12, p.color, 5, 0.2, 0.4);
         G.scene.remove(p.m); this.list.splice(i, 1); continue;
       }
