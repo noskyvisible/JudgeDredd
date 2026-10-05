@@ -4,6 +4,7 @@ import { buildLook } from './chargeneric_body.js';
 import { skinAtlas, underAtlas } from './chargeneric_paint.js';
 import { atlasFor, lookSpec, lookCount, PALETTES, SKIN_TONES, HAIR } from './chargeneric_looks.js';
 import { perpMaterial } from './chargeneric_tex.js';
+import { makeGun } from './propsperp.js';
 
 // ===========================================================================
 // Generic perps / civilians (thug, gunman, brute, junkie, biker, boss, civ).
@@ -40,6 +41,29 @@ function glowMat(hex, A) {
   let m = GLOW.get(hex);
   if (!m) { m = perpMaterial(A, { a: 0x000000, b: 0x000000, c: 0x000000, d: 0x000000, emissive: hex, emissiveIntensity: 1.7, rimK: 0 }); GLOW.set(hex, m); }
   return m;
+}
+// back surface depth (chest-bone space, behind the sternum line) for slung gear; measured once per kit
+function backZ(kit) {
+  if (kit.backZ == null) {
+    let z = -0.15;
+    for (const p of kit.parts) {
+      if (p.bone !== 'chest') continue;
+      const a = p.geo.attributes.position;
+      for (let i = 0; i < a.count; i++) { const x = a.getX(i), y = a.getY(i); if (Math.abs(x) < 0.16 && y > 0.04 && y < 0.3) z = Math.min(z, a.getZ(i)); }
+    }
+    kit.backZ = z;
+  }
+  return kit.backZ;
+}
+const SLING = new THREE.Matrix4(), _vx = new THREE.Vector3(), _vy = new THREE.Vector3(), _vz = new THREE.Vector3();
+function slingGun(ch, kit, kind) {
+  const g = makeGun(kind), k = kind === 'sawnoff' ? 1.65 : 1.45, tilt = 0.55, c = Math.cos(tilt), s = Math.sin(tilt);
+  // barrel (+Z) up over the left shoulder, side flat against the back, grip pointing down-out
+  g.quaternion.setFromRotationMatrix(SLING.makeBasis(_vx.set(0, 0, -1), _vy.set(-c, s, 0), _vz.set(s, c, 0)));
+  g.scale.setScalar(k);
+  const mid = 0.06 * k;
+  g.position.set(-s * mid, 0.18 - c * mid, backZ(kit) - 0.03 * k);
+  ch.chest.add(g);
 }
 const col = (h) => new THREE.Color(h);
 const mulHex = (h, r, g, b) => { const c = col(h); return new THREE.Color(Math.min(1, c.r * r), Math.min(1, c.g * g), Math.min(1, c.b * b)).getHex(); };
@@ -85,9 +109,11 @@ export function buildGeneric(ch, styleName, st) {
   const rim = st.rim ?? 0x8a9ac8;
 
   // ---- materials (fresh per character: enemies.js flashes armor/under/skin emissive)
-  const armor = perpMaterial(A.armor, { a: arm[0], b: arm[1], c: arm[2], d: arm[3], rim });
-  const under = perpMaterial(A.under, { a: und[0], b: und[1], c: und[2], d: und[3], rim });
-  const skin = perpMaterial(A.skin, { a: tone, b: hair, c: lips, d: eyeWhite, rim, rimK: 0.2 });
+  // rain-soaked city: outer layers a touch glossier than their dry atlas values; stronger rim pops silhouettes at night
+  const wet = st.wet ?? 0.84;
+  const armor = perpMaterial(A.armor, { a: arm[0], b: arm[1], c: arm[2], d: arm[3], rim, rough: wet, rimK: 0.3 });
+  const under = perpMaterial(A.under, { a: und[0], b: und[1], c: und[2], d: und[3], rim, rough: 0.5 + 0.5 * wet, rimK: 0.28 });
+  const skin = perpMaterial(A.skin, { a: tone, b: hair, c: lips, d: eyeWhite, rim, rimK: 0.22, rough: 0.92 });
   const glow = glowMat(st.glow ?? GLOWS[styleName] ?? GLOWS.default, A.skin);
   const mats = { armor, under, skin, glow };
   for (const p of kit.parts) {
@@ -96,6 +122,8 @@ export function buildGeneric(ch, styleName, st) {
     ch[p.bone].add(m);
   }
   ch.mats = { armor, under, gold: armor, skin, boots: under, glow };
+  // carried (non-firing) gun slung diagonally across the back
+  if (spec.backGun) slingGun(ch, kit, spec.backGun);
   queueWarmup();
 
   // ---- per-instance proportions: height / bulk jitter, kids and elders

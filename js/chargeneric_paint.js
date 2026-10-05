@@ -630,6 +630,7 @@ export function underAtlas() {
     S('skirtPlain', 128, 128, paintSkirt, {}), S('skirtPlaid', 128, 128, paintSkirt, { plaid: true, pleats: true }),
     S('collarKnit', 128, 32, paintCollar, { slot: 'B' }), S('collarShirt', 128, 32, paintCollar, { slot: 'B', fabric: 'cotton', rib: false }),
     S('strapU', 64, 64, paintStrap, {}),
+    S('tape', 64, 64, (P) => { P.fill('D', 200, { rough: 0.9, metal: 0 }); P.grain('cotton', 1.2); for (let y = -64; y < 128; y += 9) P.line([[0, y], [P.w, y + 22]], { mul: 0.78, lw: 1.2, h: 90 }); P.grime((u, v, n) => n * n, { dark: 0.35 }); for (let i = 0; i < 3; i++) P.ellipse(P.rng() * P.w, P.rng() * P.h, 4, 3, { mul: 0.6, blur: 2 }); }, {}),
   ];
   UNDER = new Atlas('under', sw, { width: 1024 });
   return UNDER;

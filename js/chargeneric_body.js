@@ -1178,13 +1178,14 @@ const ACC = {
     for (const s of [1, -1]) {
       const L = s > 0 ? 'L' : 'R', J = BP['hip' + L];
       const len = a.len ?? 0.66;
-      for (const [a0, a1, fr] of [[-Math.PI * 0.16, Math.PI * 0.62, true], [Math.PI * 0.4, Math.PI * 1.45, false]]) {
+      const frontIn = a.open ? 0.16 : 0.34; // closed coats overlap at the centre line, open ones (boss) show a split
+      for (const [a0, a1, fr] of [[-Math.PI * frontIn, Math.PI * 0.62, true], [Math.PI * 0.4, Math.PI * 1.45, false]]) {
         const rings = [];
-        const ds = [-0.07, 0.08, 0.26, 0.44, len].filter((d, i, arr) => i === 0 || d > arr[i - 1]);
+        const ds = [-0.12, -0.02, 0.12, 0.28, 0.44, len].filter((d, i, arr) => i === 0 || d > arr[i - 1]);
         for (const d of ds) {
-          // flat curtains: wide laterally (meeting at the back), shallow front-to-back, gently flared
-          const [rx, rz] = table(THIGH, Math.max(0, Math.min(d, 0.46))), t = sstep(0.0, len, d), fl = 0.05 * t * B.b;
-          rings.push({ c: [J[0] - s * (0.025 + 0.015 * t), J[1] - d, J[2] + (fr ? 0.004 : -0.01)], rx: rx * lk + 0.032 * B.b + fl + 0.015 * t, rz: rz * lk + 0.016 + fl * 0.6, v: 1 - (d + 0.07) / (len + 0.07), e: 2.6 });
+          // starts inside the coat body (thigh-tight) and flares into flat, wide curtains towards the hem
+          const [rx, rz] = table(THIGH, Math.max(0, Math.min(d, 0.46))), t = sstep(-0.12, len, d), fl = 0.075 * t * B.b;
+          rings.push({ c: [J[0] - s * (0.012 + 0.03 * t), J[1] - d, J[2] + (fr ? 0.004 : -0.01)], rx: rx * lk + 0.012 + fl + 0.03 * t, rz: rz * lk + 0.012 + fl * 0.5, v: 1 - (d + 0.12) / (len + 0.12), e: 2.4 });
         }
         const sa0 = s > 0 ? a0 : -a1, sa1 = s > 0 ? a1 : -a0;
         const P = loftVar(rings.reverse(), { seg: 8, uAbs: false });
@@ -1245,6 +1246,20 @@ const ACC = {
     const T = torsoAt(B, 1.6, 0.03);
     const tail = strap([[0.05, 1.86, nk + 0.06], [0.07, 1.75, T.cz + T.rz + 0.01], [0.08, 1.6, T.cz + T.rz + 0.012], [0.085, 1.5, T.cz + T.rz * 0.98 + 0.01]], 0.07, 0.014, () => [0, 0.1, 1]);
     K.add('chest', 'armor', tail, { rect, group: 'torso', aoK: 0.2 });
+  },
+  // boxer-style tape wraps around the forearm and across the knuckles (bare-forearm brawlers)
+  wraps(c, a) {
+    const { K, UN, BP, ak } = c, rect = UN.uv('tape');
+    for (const s2 of [1, -1]) {
+      const L = s2 > 0 ? 'L' : 'R', E = BP['el' + L], hp = BP['hand' + L];
+      for (const [d0, d1, o] of [[0.24, 0.3, 0.004], [0.3, 0.37, 0.005], [0.355, 0.4, 0.006]]) {
+        limb(K, { bone: 'el' + L, slot: 'under', rect, J: E, prof: FORE, d0, d1, k: ak, side: s2, off: o, v: (d) => (d - d0) / (d1 - d0), group: 'arm' + L + 'f', seg: 10, step: 0.03, aoK: 0 });
+      }
+      // knuckle band
+      const sz = 1.12 * Math.pow(ak, 0.6);
+      const band = loft([{ c: [hp[0], hp[1] - 0.045 * sz, hp[2]], rx: 0.026 * sz, rz: 0.054 * sz, e: 2.6 }, { c: [hp[0], hp[1] - 0.075 * sz, hp[2]], rx: 0.024 * sz, rz: 0.053 * sz, e: 2.6 }], { seg: 10 });
+      K.add('hand' + L, 'under', band, { rect, group: 'hand' + L, aoK: 0 });
+    }
   },
   // Slo-Mo veins: thin emissive tubes running under the skin of the forearms (and upper arms / neck)
   veins(c, a) {
