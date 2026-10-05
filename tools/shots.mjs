@@ -40,6 +40,8 @@ export const SHOTS = {
   cars:        { at: [447, -548, 0], free: { pos: [449.6, 2.3, -547], look: [457.5, 0.9, -522], fov: 52 }, settle: 30, setup: 'cars' },
   cars_front:  { at: [447, -548, 0], free: { pos: [452.2, 1.7, -481], look: [457.6, 1.0, -503], fov: 55 }, settle: 30, setup: 'cars' },
   traffic:     { at: [470, -540, 0], free: { pos: [462, 1.6, -520], look: [448, 1.0, -495], fov: 60 }, settle: 75, setup: 'traffic' },
+  ride_fast:   { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.16, dist: 7.5 }, settle: 150, setup: 'ride_w' },
+  flyers:      { at: [468, -575, 0], free: { pos: [446, 1.7, -560], look: [450, 24, -470], fov: 64 }, settle: 120, setup: 'flyers' },
   boost_close: { at: [-300, 50, Math.PI / 2], free: { rel: true, pos: [-2.6, 1.3, -4.2], look: [0, 0.8, -1.2], fov: 58 }, settle: 100, setup: 'boost' },
 };
 
@@ -75,7 +77,11 @@ for (const name of names) {
     }
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     if (sh.setup === 'ride_stop') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 0; T.bike.sirenOn = true; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
+    if (sh.setup === 'ride_w') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); }
     if (sh.setup === 'boost') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 70; T.bike.boostE = 1; }
+    if (sh.setup === 'flyers') {   // js/flyers.js is not wired into main.js; instantiate it here for the still
+      if (!window.__flyers) { const F = await import('/js/flyers.js'); window.__flyers = F.createFlyers(G.scene, { count: 32 }); }
+    }
     if (sh.setup === 'traffic') {   // a stream of traffic in both directions along the x=450 street
       const cs = G.traffic.cars.slice(0, 10);
       cs.forEach((c, i) => { const north = i % 2 === 0; c.dead = false; c.model.visible = true; c.yaw = north ? 0 : Math.PI; c.pos.set(450 + (north ? -5 : 5), 0, -520 - 10 + Math.floor(i / 2) * 15 + (north ? 0 : 8)); c.speed = c.maxSpeed = 9; c.vx = 0; c.vz = 0; c.extendPath(); });
@@ -89,6 +95,8 @@ for (const name of names) {
     // settle: let lights hop, traffic spawn, the camera catch up
     for (let i = 0; i < sh.settle; i++) {
       if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; }
+      if (sh.setup === 'ride_w') T.input.setKey('KeyW', i < sh.settle - 1);
+      if (window.__flyers) window.__flyers.update(1 / 60, P.pos);
       if (sh.setup === 'boost') { T.input.setKey('KeyW', i < sh.settle - 1); T.input.setKey('ShiftLeft', i < sh.settle - 1); T.bike.boostE = 1; }
       window.__step(1);
     }

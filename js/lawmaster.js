@@ -156,7 +156,7 @@ function buildWheel(kit, spin, mats, R, W, discs) {
     for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; kit.add(xf(new THREE.CylinderGeometry(0.009, 0.009, 0.02, 6), s * hw * 0.55, Math.cos(a) * 0.072, Math.sin(a) * 0.072, 0, 0, Math.PI / 2), mats.chrome, spin); }
   }
   for (const ax of discs) { const d = new THREE.RingGeometry(0.06, rIn - 0.075, 40, 1); d.rotateY(Math.PI / 2); d.translate(ax, 0, 0); kit.add(d, mats.disc, spin); }
-  for (const s of [-1, 1]) { const b = new THREE.CircleGeometry(rIn - 0.004, 36); b.rotateY(s * Math.PI / 2); b.translate(s * hw * 0.62, 0, 0); kit.add(b, mats.blur, spin); }
+  for (const s of [-1, 1]) { const b = new THREE.CircleGeometry(rIn - 0.004, 36); b.rotateY(s * Math.PI / 2); b.translate(s * hw * 0.86, 0, 0); kit.add(b, mats.blur, spin); }   // outboard of discs and rim face
 }
 
 // ---------------------------------------------------------------- flame shader (boost afterburner with shock diamonds)
@@ -203,6 +203,24 @@ function beamMaterial() {
         gl_FragColor = vec4(1.0, 0.95, 0.84, a);
       }`,
   });
+}
+
+// ---------------------------------------------------------------- tail-light trails (long-exposure streaks at speed)
+const TRAIL_N = 34;
+function makeTrails() {
+  const n = TRAIL_N, g = new THREE.BufferGeometry();
+  const pos = new Float32Array(2 * n * 2 * 3), alpha = new Float32Array(2 * n * 2), idx = [];
+  for (let t = 0; t < 2; t++) for (let i = 0; i < n - 1; i++) { const a = (t * n + i) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1).setUsage(THREE.DynamicDrawUsage)); g.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+    uniforms: { color: { value: new THREE.Color(1.0, 0.06, 0.03) } },
+    vertexShader: 'attribute float alpha; varying float vA; void main(){ vA = alpha; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 color; varying float vA; void main(){ gl_FragColor = vec4(color * 2.4 * vA, vA); }',
+  });
+  const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 11; mesh.visible = false;
+  return { mesh, hist: [[], []], pool: [], pos, alpha };
 }
 
 // ---------------------------------------------------------------- body surfaces
@@ -572,10 +590,18 @@ export function makeLawmasterModel(pal = {}) {
   kit.build();
 
   // ---------------- dynamic extras ----------------
-  const spot = new THREE.SpotLight(0xfff0d8, 0, 90, 0.5, 0.7, 1.2); spot.position.set(LAMP.x, LAMP.y, LAMP.z + 0.1); spot.target.position.set(0, 0.2, Z1 + 16); inner.add(spot); inner.add(spot.target);
+  // the player's bike carries a real headlight; perp bikes use emissive + a fake road pool so spawning one never changes the scene's light count (that would recompile every lit shader)
+  let spot, siren, roadPool = null;
+  if (!P.perp) {
+    spot = new THREE.SpotLight(0xfff0d8, 0, 90, 0.5, 0.7, 1.2); spot.position.set(LAMP.x, LAMP.y, LAMP.z + 0.1); spot.target.position.set(0, 0.2, Z1 + 16); inner.add(spot); inner.add(spot.target);
+    siren = new THREE.PointLight(0xff2020, 0, 22, 2); siren.position.set(0, 1.6, -1.2); inner.add(siren);
+  } else {
+    spot = { intensity: 0, isFake: true }; siren = { intensity: 0, color: new THREE.Color(), isFake: true };
+    roadPool = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.glowTex(), color: new THREE.Color(0xfff0d8).multiplyScalar(0.32), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }));
+    roadPool.position.set(0, 0.035, Z1 + 6.5); roadPool.renderOrder = 4; g.add(roadPool);
+  }
   const beamGeo = new THREE.ConeGeometry(2.2, 14, 16, 1, true); beamGeo.translate(0, -7, 0); beamGeo.rotateX(-Math.PI / 2);
   const beam = new THREE.Mesh(beamGeo, beamMaterial()); beam.position.set(LAMP.x, LAMP.y, LAMP.z + 0.03); beam.rotation.x = 0.07; beam.renderOrder = 5; beam.frustumCulled = false; inner.add(beam);
-  const siren = new THREE.PointLight(0xff2020, 0, 22, 2); siren.position.set(0, 1.6, -1.2); inner.add(siren);
   const spr = (tex, col, sx, sy) => { const m = new THREE.SpriteMaterial({ map: tex, color: col, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, opacity: 0 }); const s = new THREE.Sprite(m); s.scale.set(sx, sy, 1); s.renderOrder = 12; return s; };
   const gT = TX.glowTex(), sT = TX.streakTex();
   const flares = {
@@ -597,6 +623,7 @@ export function makeLawmasterModel(pal = {}) {
   }
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 4.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.glowTex(), color: new THREE.Color(P.glow).multiplyScalar(0.5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }));
   pool.position.set(0, 0.03, -0.05); pool.renderOrder = 4; g.add(pool);
+  const trails = makeTrails(); g.add(trails.mesh);
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 4.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.shadowTex(), color: 0x000000, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   shadow.position.set(0, 0.02, -0.05); shadow.renderOrder = 3; g.add(shadow);
 
@@ -605,7 +632,7 @@ export function makeLawmasterModel(pal = {}) {
     rear, front, rearSpin, frontSpin, wr: rearSpin, wf: frontSpin, spot, siren,
     sirenL: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenL), sirenR: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenR),   // bike.js flashes .material.color
     exhaust: [V3(-0.41, 0.53, -2.1), V3(0.41, 0.53, -2.1)],
-    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow,
+    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow, trails, tailY, roadPool,
     anchors: {
       seat: V3(0, 1.19, -0.58),
       pegL: pegs[0].clone(), pegR: pegs[1].clone(),
@@ -713,8 +740,42 @@ export function updateLawmasterVisuals(bike, dt) {
   u.flares.tail.material.opacity = live ? (on ? 0.55 : 0.35) : 0;
   u.flares.brake.material.opacity = live ? V.brakeK * 0.9 : 0;
   u.beam.material.uniforms.time.value = V.t; u.beam.material.uniforms.k.value = on ? 1 : 0; u.beam.visible = on;
+  if (u.roadPool) { u.roadPool.visible = on; u.roadPool.rotation.z = -(bike.model.rotation.z || 0); }
   u.pool.rotation.z = -(bike.model.rotation.z || 0); u.shadow.rotation.z = u.pool.rotation.z; u.shadow.visible = !bike.crashed; u.pool.material.opacity = live ? 0.55 + 0.25 * pulse * (on ? 1 : 0.3) : 0;
   u.exhaust[0].set(-0.41, 0.53 - V.cr * 0.6, -2.1); u.exhaust[1].set(0.41, 0.53 - V.cr * 0.6, -2.1);
+  updateTrails(bike, u, dt, live ? smoothstep(22, 45, asp) * (0.55 + 0.45 * V.brakeK) : 0);
+}
+
+// tail-light streaks: world-space history of the two tail-bar ends, written camera-facing in model space
+const _tq = new THREE.Quaternion(), _te = new THREE.Euler(), _tm = new THREE.Matrix4(), _ti = new THREE.Matrix4(), _tp = new THREE.Vector3(), _ts = new THREE.Vector3(1, 1, 1);
+const _ta = new THREE.Vector3(), _tb = new THREE.Vector3(), _tc = new THREE.Vector3(), _td = new THREE.Vector3(), _cam = new THREE.Vector3();
+function updateTrails(bike, u, dt, k) {
+  const T = u.trails; if (!T) return;
+  const m = bike.model;
+  _tq.setFromEuler(_te.set(0, m.rotation.y, m.rotation.z, 'YXZ')); _tm.compose(_tp.copy(m.position), _tq, _ts); _ti.copy(_tm).invert();
+  if (k <= 0.001 || !dt) { if (T.hist[0].length) { for (const h of T.hist) { T.pool.push(...h); h.length = 0; } } T.mesh.visible = false; return; }
+  const maxLen = 11, w = 0.042;
+  for (let t = 0; t < 2; t++) {
+    const h = T.hist[t];
+    const p = T.pool.pop() || new THREE.Vector3();
+    p.set(t ? 0.17 : -0.17, u.tailY - 0.03, TZ0 - 0.03).applyMatrix4(_tm);
+    h.unshift(p);
+    let len = 0; for (let i = 1; i < h.length; i++) { len += h[i].distanceTo(h[i - 1]); if (len > maxLen || i >= TRAIL_N - 1) { T.pool.push(...h.splice(i + 1)); break; } }
+  }
+  (G.camera ? _cam.copy(G.camera.position) : _cam.set(0, 2, -10)).applyMatrix4(_ti);   // camera in model space
+  for (let t = 0; t < 2; t++) {
+    const h = T.hist[t], n = h.length;
+    for (let i = 0; i < TRAIL_N; i++) {
+      const o = (t * TRAIL_N + i) * 2;
+      if (i >= n || n < 2) { T.alpha[o] = T.alpha[o + 1] = 0; T.pos.fill(0, o * 3, o * 3 + 6); continue; }
+      _ta.copy(h[i]).applyMatrix4(_ti); _tb.copy(h[Math.max(0, i - 1)]).applyMatrix4(_ti); _tc.copy(h[Math.min(n - 1, i + 1)]).applyMatrix4(_ti);
+      _td.subVectors(_tb, _tc); const view = _tb.subVectors(_cam, _ta); _td.cross(view).normalize().multiplyScalar(w * (1 - 0.6 * i / n));
+      T.pos[o * 3] = _ta.x + _td.x; T.pos[o * 3 + 1] = _ta.y + _td.y; T.pos[o * 3 + 2] = _ta.z + _td.z;
+      T.pos[o * 3 + 3] = _ta.x - _td.x; T.pos[o * 3 + 4] = _ta.y - _td.y; T.pos[o * 3 + 5] = _ta.z - _td.z;
+      T.alpha[o] = T.alpha[o + 1] = Math.min(1, k * 1.35) * Math.pow(1 - i / (n - 1), 1.4);
+    }
+  }
+  T.mesh.geometry.attributes.position.needsUpdate = true; T.mesh.geometry.attributes.alpha.needsUpdate = true; T.mesh.visible = true;
 }
 
 // ===========================================================================

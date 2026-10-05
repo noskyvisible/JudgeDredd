@@ -85,6 +85,11 @@ const res = await page.evaluate(async ({ subject, angles, state: state0, states,
     if (subject === 'perp') ch = b.rider;
     const list = states ? states.split(',') : [state];
     for (const stt of list) subjects.push({ obj: b.model, label: subject + ' · ' + stt, center: new THREE.Vector3(0, 0.95, 0), size: 4.6, bike: b, ch, st: stt });
+  } else if (subject === 'flyer') {
+    const F = await import('/js/flyers.js'); const fl = F.createFlyers(studio, { count: 1 });
+    const grp = new THREE.Group(); for (const m of fl.meshes) { m.removeFromParent(); m.setMatrixAt(0, new THREE.Matrix4()); m.instanceMatrix.needsUpdate = true; m.count = 1; grp.add(m); }
+    grp.position.y = 0.6; studio.add(grp);
+    subjects.push({ obj: grp, label: 'spinner', center: new THREE.Vector3(0, 1.0, 0), size: 5.2 });
   } else {
     const kinds = subject === 'cars' ? carMod.CAR_TYPES || ['sedan', 'coupe', 'taxi', 'truck'] : subject.split(':')[1].split(',');
     for (const k of kinds) {
