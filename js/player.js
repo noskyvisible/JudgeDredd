@@ -262,7 +262,7 @@ export class Player {
     const gl = 1.8 + Math.sin(G.time * 30) * 0.4 + (this.state === 'attack' ? 1.5 : 0);
     this.baton.userData.tipMat.color.setRGB(gl, gl * 0.95, gl * 0.45);
     // lawgiver display colour
-    const disp = this.lawgiver.userData.disp; if (disp) disp.material.color.set(AMMO[this.ammoIdx].color).multiplyScalar(1.5);
+    this.lawgiver.userData.setAmmo?.(AMMO[this.ammoIdx].color);
 
     const ev = ch.update(dt);
     this.syncVisual();

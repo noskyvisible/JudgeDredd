@@ -10,6 +10,7 @@ import * as THREE from 'three';
 // ---------------------------------------------------------------------------
 
 const PLANE_Y = 0;
+const FAR_DYN = 45;       // metres: dynamic Groups beyond this are left out of the mirror pass
 const _p = new THREE.Vector3(), _f = new THREE.Vector3(), _u = new THREE.Vector3(), _t = new THREE.Vector3();
 
 export class GroundReflection {
@@ -48,6 +49,12 @@ export class GroundReflection {
   // Renders the mirrored view.  Leaves the shadow map freshly updated for the main pass to reuse.
   render(renderer, scene, camera) {
     if (!this.enabled) return false;
+    // skip the whole second pass when the ground cannot be on screen (looking steeply up) or is too far below to matter
+    camera.updateMatrixWorld();
+    _f.set(0, 0, -1).transformDirection(camera.matrixWorld);
+    const camY = camera.matrixWorld.elements[13];
+    if (camY > 140 || _f.y > Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) + 0.06) { this.uniforms.uReflOn.value = 0; return false; }
+    this.uniforms.uReflOn.value = 1;
     const size = renderer.getDrawingBufferSize(_t);
     this.resize(size.x, size.y);
     camera.updateMatrixWorld();
@@ -65,10 +72,18 @@ export class GroundReflection {
     const prev = renderer.getRenderTarget();
     const vis = this.hide.map((o) => o.visible);
     for (const o of this.hide) o.visible = false;
+    // dynamic entities (characters, cars, props are top-level Groups) farther than FAR_DYN are invisible in a blurred reflection anyway: skip their draws
+    const far2 = FAR_DYN * FAR_DYN, skipped = this._skipped || (this._skipped = []); skipped.length = 0;
+    for (const o of scene.children) {
+      if (!o.isGroup || !o.visible) continue;
+      const dx = o.position.x - _p.x, dz = o.position.z - _p.z;
+      if (dx * dx + dz * dz > far2 && (o.parent === scene)) { o.visible = false; skipped.push(o); }
+    }
     renderer.setRenderTarget(this.rt);
     renderer.render(scene, cam);
     renderer.setRenderTarget(prev);
     this.hide.forEach((o, i) => (o.visible = vis[i]));
+    for (const o of skipped) o.visible = true;
     return true;
   }
 }

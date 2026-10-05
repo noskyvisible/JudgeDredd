@@ -1,11 +1,12 @@
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { G } from './state.js';
 import { installHeightFog } from './shaders.js';
+import { reflection } from './reflect.js';
+import { createPost } from './post.js';
+import { eagleShape } from './world.js';
+import { buildStreetProps, updateStreetProps, streetPropStreams } from './streetprops.js';
+import { buildMonorail } from './monorail.js';
+import { buildHallStatues } from './hallstatues.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -20,7 +21,7 @@ import { Player } from './player.js';
 import { Character, STYLES, CLIPS, makeLawgiver, makeBaton, makePistol, makeBat } from './character.js';
 import { Lawmaster, ridePose } from './bike.js';
 import { hud, judgement } from './ui.js';
-import { clamp, damp, rand } from './util.js';
+import { clamp, damp, rand, mulberry32 } from './util.js';
 
 installHeightFog();
 const canvas = document.getElementById('game');
@@ -34,89 +35,36 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 5000);
 G.scene = scene; G.camera = camera; G.renderer = renderer;
-scene.add(camera);
+scene.add(camera); camera.layers.enable(1);   // layer 1 = ground meshes (hidden from the mirror camera, see reflect.js)
 
-// ---------------------------------------------------------------- post
-const rt = new THREE.WebGLRenderTarget(innerWidth * PR, innerHeight * PR, { type: THREE.HalfFloatType, samples: 4 });
-const composer = new EffectComposer(renderer, rt);
-composer.setPixelRatio(PR);
-composer.addPass(new RenderPass(scene, camera));
-// scrub NaN / Inf / absurd HDR values before bloom: a single bad pixel would otherwise get blurred across the whole screen (black frame)
-composer.addPass(new ShaderPass({
-  uniforms: { tDiffuse: { value: null } },
-  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 48.0), 1.0); }',
-}));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.2, 0.35, 1.2);
-composer.addPass(bloom);
-const post = new ShaderPass({
-  uniforms: {
-    tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) },
-    aber: { value: 0.0006 }, vig: { value: 0.42 }, grain: { value: 0.02 }, speed: { value: 0 }, sharpen: { value: 0.35 },
-    sat: { value: 1.08 }, contrast: { value: 1.06 }, flash: { value: 0 }, hurt: { value: 0 },
-    shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
-  },
-  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 res; uniform float time, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
-    float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }
-    void main(){
-      vec2 uv = vUv; float aspect = res.x / res.y;
-      // expanding shockwave rings bend the image
-      for (int i = 0; i < 4; i++) {
-        vec4 s = shock[i];
-        if (s.w > 0.001) {
-          vec2 d = uv - s.xy; d.x *= aspect; float r = length(d);
-          float ring = exp(-pow((r - s.z) / 0.045, 2.0));
-          vec2 dir = d / (r + 1e-4); dir.x /= aspect;
-          uv -= dir * ring * s.w * 0.05;
-        }
-      }
-      vec2 c = uv - 0.5; float d2 = dot(c, c);
-      vec3 col;
-      if (speed > 0.01) { // radial speed blur
-        vec3 acc = vec3(0.0);
-        for (int i = 0; i < 8; i++) { float t = float(i) / 7.0; acc += texture2D(tDiffuse, 0.5 + c * (1.0 - speed * 0.07 * t)).rgb; }
-        col = acc / 8.0;
-      } else col = texture2D(tDiffuse, uv).rgb;
-      vec2 off = c * aber * (1.0 + d2 * 8.0);
-      col.r = texture2D(tDiffuse, uv + off).r * (speed > 0.01 ? 1.0 : 1.0) * 0.5 + col.r * 0.5;
-      col.b = texture2D(tDiffuse, uv - off).b * 0.5 + col.b * 0.5;
-      // unsharp mask
-      vec2 px = 1.0 / res;
-      vec3 bl = (texture2D(tDiffuse, uv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, uv - vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, uv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, uv - vec2(0.0, px.y)).rgb) * 0.25;
-      col += (col - bl) * sharpen;
-      // grade: teal-violet shadows, warm highlights, mild S-curve
-      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-      col = mix(vec3(l), col, sat);
-      col = (col - 0.5) * contrast + 0.5;
-      col += vec3(-0.012, 0.004, 0.03) * (1.0 - smoothstep(0.0, 0.5, l)) + vec3(0.03, 0.012, -0.015) * smoothstep(0.45, 1.0, l);
-      col += vec3(0.55, 0.6, 0.9) * flash * 0.12;
-      col *= 1.0 - d2 * vig * 2.0;
-      col = mix(col, col * vec3(1.15, 0.55, 0.55), hurt * smoothstep(0.1, 0.45, d2));
-      col += (hash(vUv * res + time) - 0.5) * grain;
-      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
-    }`,
-});
-composer.addPass(new OutputPass());
-composer.addPass(post);
+// ---------------------------------------------------------------- post (js/post.js: bloom pyramid + streaks, filmic tone map, grade)
+const P = createPost(renderer, scene, camera, innerWidth, innerHeight, PR);
+const { composer, post } = P;
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [
-  { name: 'LOW', pr: 0.75, shadows: false, bloom: false },
-  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true },
-  { name: 'HIGH', pr: PR, shadows: true, bloom: true },
+  { name: 'LOW', pr: 0.75, shadows: false, bloom: false, streaks: false, ao: 0, refl: 0 },
+  { name: 'MEDIUM', pr: 1.0, shadows: true, bloom: true, streaks: false, ao: 6, refl: 0.4 },
+  { name: 'HIGH', pr: PR, shadows: true, bloom: true, streaks: true, ao: 10, refl: 0.55 },
 ];
 G.quality = 2; if (navigator.webdriver) G.autoQ = true;
 function setQuality(q, announce) {
   G.quality = q; const Q = QUALITY[q];
-  renderer.setPixelRatio(Q.pr); composer.setPixelRatio(Q.pr); composer.setSize(innerWidth, innerHeight);
-  world.sun.castShadow = Q.shadows; bloom.enabled = Q.bloom; fx.setScale(innerHeight * Q.pr);
+  renderer.setPixelRatio(Q.pr); P.setSize(innerWidth, innerHeight, Q.pr); P.setQuality(Q);
+  world.sun.castShadow = Q.shadows; fx.setScale(innerHeight * Q.pr);
+  reflection.setEnabled(Q.refl > 0, Q.refl);
   if (announce) hud.feed(`GRAPHICS: ${Q.name}`, 'good');
 }
 
 // ---------------------------------------------------------------- world & systems
 fx.init(scene);
-world.build(scene, renderer);
+// the city layout must be the same every time: world generation mixes seeded and Math.random-based helpers, so pin Math.random while it builds
+{ const realRandom = Math.random; Math.random = mulberry32(19771977); try { world.build(scene, renderer); } finally { Math.random = realRandom; } }
+reflection.hide.push(...(world.mirrorHide || []));
+buildStreetProps(scene);
+const monorail = buildMonorail(scene);
+buildHallStatues(scene);
+setQuality(G.quality);
 fx.setScale(innerHeight * PR);
 
 G.enemies = new EnemyManager();
@@ -173,6 +121,7 @@ G.callBike = () => {
 const titleEl = document.getElementById('title'), startBtn = document.getElementById('startbtn');
 function startGame() {
   audio.init(); G.started = true; G.paused = false; titleEl.classList.add('hidden'); hud.show(true);
+  player.pos.copy(world.spawnPos); post.uniforms.uFade.value = 1; post.uniforms.uDof.value = 0; camera.fov = 62; camera.updateProjectionMatrix();
   input.lock();
   G.crimes.dispatch('brawl');
   const tips = [[2500, 'Follow the gold marker to the crime scene — TAB cycles crimes'], [6000, 'Walk to the Lawmaster and press E to mount it'],
@@ -201,10 +150,17 @@ G.onRespawnReady = () => {
 };
 window.addEventListener('keydown', (e) => { if (judgement.key(e)) { e.preventDefault(); } });
 G.voiceOn = true;
+{ // vector eagle crest (same silhouette as the Hall / pauldron) for the title
+  const pts = eagleShape().getPoints(), xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), W = 140, H = 118;
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${(((p.x - x0) / (x1 - x0)) * W).toFixed(1)},${(H - ((p.y - y0) / (y1 - y0)) * H).toFixed(1)}`).join('') + 'Z';
+  const el = document.querySelector('#title .eagle');
+  if (el) el.innerHTML = `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" width="132" height="112"><defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0a8"/><stop offset=".5" stop-color="#e9b02e"/><stop offset="1" stop-color="#9a6410"/></linearGradient></defs><path d="${d}" fill="url(#eg)" stroke="#3a2406" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+}
 
 function resize() {
   const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h); composer.setSize(w, h); post.uniforms.res.value.set(w * QUALITY[G.quality].pr, h * QUALITY[G.quality].pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
+  renderer.setSize(w, h); P.setSize(w, h, QUALITY[G.quality].pr); camera.aspect = w / h; camera.updateProjectionMatrix(); fx.setScale(h * QUALITY[G.quality].pr);
 }
 addEventListener('resize', resize);
 
@@ -237,7 +193,7 @@ function simulate(dt) {
     }
     G.enemies.update(gdt); G.civs.update(gdt); G.traffic.update(gdt); G.pickups.update(gdt); G.crimes.update(gdt); weapons.update(gdt);
   }
-  world.update(G.modal ? 0 : dt, player.pos);
+  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt);
   fx.update(dt, gdt);
   const b = G.mode === 'bike' ? bike : null;
   const sp01 = b ? clamp((Math.abs(b.speed) - 40) / 70, 0, 1) : 0;
@@ -251,15 +207,59 @@ function simulate(dt) {
   audio.setIntensity(clamp(engaged * 0.22 + (b ? clamp(Math.abs(b.speed) / 100, 0, 0.4) : 0) + (player.combo > 3 ? 0.2 : 0), 0, 1));
   const bk = G.mode === 'bike' ? bike : (bike.called ? bike : null);
   audio.setEngine(!!bk, bk ? clamp(Math.abs(bk.speed) / 78, 0, 1.3) : 0, bk?.boosting);
+  { const h = monorail.hearing(camera.position); audio.setRail(h.level, h.approach); }
   audio.update(dt);
   hud.update(dt);
+}
+// One displayed frame: the mirrored ground-reflection pass first (it refreshes the shadow map), then the main pass, which reuses that shadow map.
+function renderFrame() {
+  renderer.info.reset();
+  const mirrored = reflection.render(renderer, scene, camera);
+  if (mirrored) renderer.shadowMap.autoUpdate = false;
+  composer.render();
+  renderer.shadowMap.autoUpdate = true;
+}
+// ---------------------------------------------------------------- cinematic title: the camera glides through the Hall plaza while the city lives behind the logo
+const TITLE_SHOTS = [   // all on open road / plaza so the camera never meets a building
+  { a: [-58, 3.5, 57], b: [58, 7, 57], la: [-12, 26, 0], lb: [12, 30, 0], fov: 58, d: 26 },     // glide across the Hall frontage
+  { a: [-8, 2.0, 60], b: [7, 10, 50], la: [0, 17, 12], lb: [0, 40, 6], fov: 46, d: 18 },         // low push in toward the doors, craning up
+  { a: [-57, 2.5, 44], b: [-57, 26, 44], la: [0, 24, 10], lb: [0, 44, 6], fov: 54, d: 22 },      // crane up the plaza edge to reveal the eagle
+];
+const titleState = { i: 0, t: 0 };
+const _ta = new THREE.Vector3(), _tl = new THREE.Vector3();
+const ease = (x) => x * x * (3 - 2 * x);
+function updateTitle(dt) {
+  const T = titleState, S = TITLE_SHOTS[T.i];
+  T.t += dt;
+  const k = Math.min(1, T.t / S.d), e = ease(k);
+  _ta.set(...S.a).lerp(_tl.set(...S.b), e);
+  camera.position.copy(_ta); camera.position.y += Math.sin(G.time * 0.5) * 0.12;
+  _tl.set(...S.la).lerp(_ta.set(...S.lb), e); camera.lookAt(_tl);
+  if (camera.fov !== S.fov) { camera.fov = S.fov; camera.updateProjectionMatrix(); }
+  // dip to black between shots (and fade up at the very start)
+  const fadeIn = Math.min(1, T.t / 1.2), fadeOut = Math.min(1, (S.d - T.t) / 1.0);
+  post.uniforms.uFade.value = Math.max(0, Math.min(fadeIn, fadeOut));
+  if (T.t >= S.d) { T.i = (T.i + 1) % TITLE_SHOTS.length; T.t = 0; }
+  player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
+  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); fx.update(dt, dt);
+  post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
+  const Ut = post.uniforms; Ut.uDof.value = QUALITY[G.quality].ao ? 0.8 : 0; Ut.uFocus.value = camera.position.distanceTo(_tl) * 0.95;
+}
+// depth of field on the cinematic moments only: pause / map, the finisher camera, the judgement dialog
+function updateDof(dt) {
+  if (!G.started) return;
+  const U = post.uniforms; let target = 0, focus = U.uFocus.value;
+  if (G.paused || G.mapOpen) { target = 1; focus = camera.position.distanceTo(player.pos) + 0.5; }
+  else if (G.finisherCam) { target = 0.55; focus = camera.position.distanceTo(player.pos) + 0.3; }
+  else if (G.modal) { target = 0.9; focus = 4; }
+  U.uDof.value = damp(U.uDof.value, QUALITY[G.quality].ao ? target : 0, 5, dt); U.uFocus.value = damp(U.uFocus.value, focus, 8, dt);
 }
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
-  simulate(dt);
-  renderer.info.reset();
-  if (!window.__noRender) composer.render();
+  if (!G.started && !window.__noRender) updateTitle(dt);
+  simulate(dt); updateDof(dt);
+  if (!window.__noRender) renderFrame();
   input.endFrame();
   frames++; acc += dt;
   if (acc > 1) {
@@ -275,5 +275,5 @@ requestAnimationFrame(frame);
 window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat });
-window.__render = () => { renderer.info.reset(); composer.render(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };
+Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
+window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };

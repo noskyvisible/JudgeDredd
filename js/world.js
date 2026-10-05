@@ -7,6 +7,7 @@ import { rand, randInt, pick, chance, clamp, mulberry32, segAABB, makeCanvas, ca
 import * as TX from './textures.js';
 import { makeFacadeSet } from './facades.js';
 import { patchWall, patchRoad } from './shaders.js';
+import { reflection } from './reflect.js';
 import { buildHolograms } from './holo.js';
 const tmpDir = new THREE.Vector3();
 
@@ -45,7 +46,7 @@ function addBox(b) {
 }
 
 export const world = {
-  N, S, ROAD, HALF, boxes,
+  N, S, ROAD, HALF, boxes, addBox,
   hallPos: new THREE.Vector3(0, 0, 0),
   spawnPos: new THREE.Vector3(0, 0, 40),
   dynamic: [],      // dynamic solids {x,z,r,h,owner}
@@ -209,23 +210,38 @@ export const world = {
 
     // ===== sky & fog =====
     scene.background = new THREE.Color(0x120a1c);
-    scene.fog = new THREE.FogExp2(0x1c1030, 0.0026);
+    scene.fog = new THREE.FogExp2(0x26143a, 0.0029);
     this.skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
       uniforms: { time: { value: 0 }, flash: { value: 0 } },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+      // smog sky: a magenta-orange light-pollution glow at the horizon rising into violet and indigo, two drifting cloud decks that are
+      // lit from below by the city (warm) and from above by lightning, plus a faint distant aurora-like neon haze
       fragmentShader: `varying vec3 vP; uniform float time; uniform float flash;
         float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
         float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+        float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
         void main(){
           vec3 d = normalize(vP); float y = d.y;
-          vec3 hor = vec3(0.55,0.2,0.28), mid = vec3(0.12,0.05,0.2), top = vec3(0.025,0.02,0.07);
-          vec3 c = mix(hor, mid, smoothstep(-0.05,0.35,y)); c = mix(c, top, smoothstep(0.3,0.9,y));
-          vec2 uv = d.xz/(abs(y)+0.35)*2.0 + vec2(time*0.01, 0.0);
-          float cl = n(uv*2.0)*0.5 + n(uv*5.0)*0.3 + n(uv*11.0)*0.2;
-          c *= 0.55 + cl*0.9;
-          c += vec3(0.4,0.4,0.6)*flash*(0.3+cl);
-          gl_FragColor = vec4(c,1.0);
+          vec3 hor = vec3(0.95, 0.32, 0.36), mid = vec3(0.20, 0.07, 0.30), top = vec3(0.025, 0.02, 0.09);
+          float up = clamp(y, 0.0, 1.0);
+          vec3 c = mix(hor, mid, pow(smoothstep(-0.04, 0.55, y), 0.5));
+          c = mix(c, top, smoothstep(0.28, 1.0, up));
+          c += vec3(0.5, 0.16, 0.2) * exp(-abs(y) * 14.0) * 0.55;                          // glow right at the horizon
+          // two cloud decks, projected onto planes so they converge toward the horizon
+          float ay = max(abs(y), 0.035);
+          vec2 u1 = d.xz / (ay + 0.12) * 1.15 + vec2(time * 0.012, time * 0.004);
+          vec2 u2 = d.xz / (ay + 0.30) * 0.7 - vec2(time * 0.006, -time * 0.003) + 31.7;
+          float c1 = fbm(u1 * 1.6), c2 = fbm(u2 * 1.9);
+          float cov1 = smoothstep(0.42, 0.78, c1), cov2 = smoothstep(0.48, 0.82, c2) * 0.7;
+          float below = smoothstep(0.0, 0.35, 1.0 - up);                                   // low clouds catch the city glow, high ones stay dark
+          vec3 glow = mix(vec3(0.16, 0.07, 0.2), vec3(0.95, 0.38, 0.34), below * below) * (0.35 + 0.65 * c1);
+          c = mix(c, glow, cov1 * 0.85);
+          c = mix(c, vec3(0.10, 0.06, 0.16) + vec3(0.35, 0.13, 0.2) * below, cov2 * 0.55);
+          // lightning lights the cloud decks from within
+          c += vec3(0.5, 0.55, 0.9) * flash * (0.2 + 1.3 * (cov1 + cov2 * 0.6) * (0.4 + c1));
+          c *= 0.85 + 0.15 * step(0.0, y);
+          gl_FragColor = vec4(c, 1.0);
         }`,
     });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), this.skyMat);
@@ -250,22 +266,36 @@ export const world = {
         roughnessMap: s.ormMap, metalnessMap: s.ormMap, roughness: 1, metalness: 1, normalMap: s.normalMap, normalScale: new THREE.Vector2(0.9, 0.9),
         vertexColors: true, envMapIntensity: 1.1,
       });
-      return patchWall(m), m;
+      return patchWall(m, v), m;
     });
     const [roadMap, roadRough, roadNorm] = TX.makeRoad();
     const roadMat = new THREE.MeshStandardMaterial({ map: roadMap, roughnessMap: roadRough, normalMap: roadNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
-    patchRoad(roadMat, this.timeU);
+    patchRoad(roadMat, this.timeU, reflection.uniforms);
     const [intMap, intRough, intNorm] = TX.makeIntersection();
     const intMat = new THREE.MeshStandardMaterial({ map: intMap, roughnessMap: intRough, normalMap: intNorm, normalScale: new THREE.Vector2(0.45, 0.45), roughness: 1, metalness: 0.1, envMapIntensity: 1.0 });
-    patchRoad(intMat, this.timeU);
+    patchRoad(intMat, this.timeU, reflection.uniforms);
     const [swMap, swRough, swNorm] = TX.makeSidewalk();
     for (const t of [swMap, swRough, swNorm]) t.repeat.set(BLOCK / 8, BLOCK / 8);
     const swMat = new THREE.MeshStandardMaterial({ map: swMap, roughnessMap: swRough, normalMap: swNorm, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1, metalness: 0.05, envMapIntensity: 0.8 });
-    patchRoad(swMat, this.timeU);
+    patchRoad(swMat, this.timeU, reflection.uniforms);
     const grassTex = TX.makeGrass(); grassTex.repeat.set(10, 10);
     const grassMat = new THREE.MeshStandardMaterial({ map: grassTex, roughness: 0.95 });
     const signTex = TX.makeSignAtlas();
     const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.15, 1.15, 1.15) });
+    // neon life: every sign breathes slightly; a few are faulty and stutter / drop out
+    signMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.timeU;
+      shader.vertexShader = 'attribute float sid; varying float vSid;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvSid = sid;');
+      shader.fragmentShader = 'uniform float uTime; varying float vSid;\n' + shader.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+{
+  float tt = uTime * (5.0 + vSid * 9.0) + vSid * 91.0;
+  float glitch = smoothstep(0.5, 0.62, sin(tt) * sin(tt * 1.73 + 3.0) * 0.5 + 0.5);
+  float faulty = step(0.8, vSid);
+  float k = mix(1.0, 0.18 + 0.82 * glitch, faulty) * (0.93 + 0.07 * sin(uTime * 2.1 + vSid * 40.0));
+  diffuseColor.rgb *= k;
+}`);
+    };
+    signMat.customProgramCacheKey = () => 'sign-flicker';
     this.signMat = signMat;
     const neonMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
     const shopMat = new THREE.MeshBasicMaterial({ map: TX.makeShopTex(), vertexColors: true, toneMapped: false });
@@ -328,7 +358,7 @@ export const world = {
       const uv = g.attributes.uv;
       const col = idx % TX.SIGN_COLS, row = Math.floor(idx / TX.SIGN_COLS);
       for (let k = 0; k < 4; k++) uv.setXY(k, (col + uv.getX(k)) / TX.SIGN_COLS, 1 - (row + 1 - uv.getY(k)) / TX.SIGN_ROWS);
-      g.rotateY(ry); g.translate(x, y, z); signG.push(g);
+      g.rotateY(ry); g.translate(x, y, z); { const hh = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; g.setAttribute('sid', new THREE.BufferAttribute(new Float32Array(4).fill(hh - Math.floor(hh)), 1)); } signG.push(g);   // per-sign id from its position (no rng draw: the city layout must not shift)
     };
 
     // ===== roads =====
@@ -346,10 +376,10 @@ export const world = {
       }
       for (let m = 0; m <= N; m++) { const g = new THREE.PlaneGeometry(ROAD, ROAD); g.rotateX(-Math.PI / 2); g.translate(roadX(k), 0.002, roadX(m)); intGs.push(g); }
     }
-    const roadMesh = new THREE.Mesh(mergeGeometries(roadGs), roadMat); roadMesh.receiveShadow = true; scene.add(roadMesh);
-    const intMesh = new THREE.Mesh(mergeGeometries(intGs), intMat); intMesh.receiveShadow = true; scene.add(intMesh);
+    const roadMesh = new THREE.Mesh(mergeGeometries(roadGs), roadMat); roadMesh.receiveShadow = true; roadMesh.layers.set(1); scene.add(roadMesh);   // ground lives on layer 1: the mirror camera must not see it
+    const intMesh = new THREE.Mesh(mergeGeometries(intGs), intMat); intMesh.receiveShadow = true; intMesh.layers.set(1); scene.add(intMesh);
     const base = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x08080c, roughness: 0.9 }));
-    base.position.y = -0.1; base.receiveShadow = true; scene.add(base);
+    base.position.y = -0.1; base.receiveShadow = true; base.layers.set(1); scene.add(base);
 
     // ===== blocks =====
     const swGs = [], grassGs = [];
@@ -587,7 +617,7 @@ export const world = {
     scene.add(lampPole, lampHead);
 
     // ===== merge & add meshes =====
-    const sw = new THREE.Mesh(mergeGeometries(swGs), swMat); sw.receiveShadow = true; scene.add(sw);
+    const sw = new THREE.Mesh(mergeGeometries(swGs), swMat); sw.receiveShadow = true; sw.layers.set(1); scene.add(sw);
     // sidewalk uv: BoxGeometry uv 0..1 per face; repeat set on texture handles tiling
     if (grassGs.length) { const m = new THREE.Mesh(mergeGeometries(grassGs), grassMat); m.receiveShadow = true; scene.add(m); }
     wallG.forEach((arr, v) => {
@@ -695,20 +725,53 @@ export const world = {
     // paving inlay leading to the door (flat, so nobody trips on it)
     for (let i = 0; i < 5; i++) neonBox(cx, 0.28, cz + 15 + i * 4.2, 58 - i * 7, 0.05, 0.35, 0xffc040, 0.9);
     neonBox(cx, 0.28, cz + 15, 0.4, 0.05, 17, 0xffc040, 0.9);
+    { // gold eagle emblem inlaid in the plaza (glossy, so it mirrors the façade in the rain) + two waving banners between the columns
+      const eagleCanvas = (W, H, draw) => { const [c, x] = makeCanvas(W, H); draw(x, W, H); return canvasTex(c); };
+      const eaglePath = (x, cx0, cy0, size) => {
+        const pts = eagleShape().getPoints(); const xs = pts.map((q) => q.x), ys = pts.map((q) => q.y);
+        const w = Math.max(...xs) - Math.min(...xs), hh = Math.max(...ys) - Math.min(...ys), k = size / Math.max(w, hh), mx = (Math.max(...xs) + Math.min(...xs)) / 2, my = (Math.max(...ys) + Math.min(...ys)) / 2;
+        x.beginPath(); pts.forEach((q, i) => { const px = cx0 + (q.x - mx) * k, py = cy0 - (q.y - my) * k; i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.closePath();
+      };
+      const emblem = eagleCanvas(1024, 1024, (x, W) => {
+        const g = x.createLinearGradient(0, 120, 0, 900); g.addColorStop(0, '#fff0a0'); g.addColorStop(0.5, '#e8b030'); g.addColorStop(1, '#8a5a10');
+        x.fillStyle = 'rgba(12,10,18,0.92)'; x.beginPath(); x.arc(512, 512, 500, 0, 7); x.fill();
+        x.strokeStyle = g; x.lineWidth = 16; x.beginPath(); x.arc(512, 512, 488, 0, 7); x.stroke(); x.lineWidth = 6; x.beginPath(); x.arc(512, 512, 372, 0, 7); x.stroke();
+        for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; x.fillStyle = g; x.beginPath(); x.moveTo(512 + Math.cos(a) * 372, 512 + Math.sin(a) * 372); x.lineTo(512 + Math.cos(a + 0.09) * 440, 512 + Math.sin(a + 0.09) * 440); x.lineTo(512 + Math.cos(a - 0.09) * 440, 512 + Math.sin(a - 0.09) * 440); x.fill(); }
+        x.fillStyle = g; eaglePath(x, 512, 500, 560); x.fill(); x.strokeStyle = '#2a1804'; x.lineWidth = 5; x.stroke();
+        x.font = '900 40px Impact, "Arial Black", sans-serif'; x.fillStyle = g; x.textAlign = 'center'; x.textBaseline = 'middle';
+        const txt = 'JUSTICE DEPARTMENT  ·  MEGA-CITY ONE  ·  JUSTICE DEPARTMENT  ·  MEGA-CITY ONE  ·  ';
+        for (let i = 0; i < txt.length; i++) { const a = -Math.PI / 2 + (i + 0.5) / txt.length * Math.PI * 2; x.save(); x.translate(512 + Math.cos(a) * 430, 512 + Math.sin(a) * 430); x.rotate(a + Math.PI / 2); x.fillText(txt[i], 0, 0); x.restore(); }
+      });
+      const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
+      const emMat = new THREE.MeshStandardMaterial({ map: emblem, roughnessMap: white, roughness: 0.28, metalness: 0.5, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false, emissive: 0x5a3a08, emissiveMap: emblem, emissiveIntensity: 0.55 });
+      patchRoad(emMat, this.timeU, reflection.uniforms);
+      const emMesh = new THREE.Mesh(new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2), emMat); emMesh.position.set(cx, 0.27, cz + 31);   // the plaza paving is the 0.24 m sidewalk slab
+      emMesh.layers.set(1); emMesh.receiveShadow = true; scene.add(emMesh); this.emblemMesh = emMesh;
+      const bannerTex = eagleCanvas(256, 1024, (x, W, H) => {
+        const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#5a0d12'); g.addColorStop(1, '#2a0508'); x.fillStyle = g; x.fillRect(0, 0, W, H);
+        const gg = x.createLinearGradient(0, 0, 0, H); gg.addColorStop(0, '#fff0a0'); gg.addColorStop(0.5, '#e8b030'); gg.addColorStop(1, '#8a5a10');
+        x.strokeStyle = gg; x.lineWidth = 10; x.strokeRect(12, 12, W - 24, H - 24); x.lineWidth = 3; x.strokeRect(26, 26, W - 52, H - 52);
+        x.fillStyle = gg; eaglePath(x, W / 2, 330, 190); x.fill();
+        x.font = '900 64px Impact, "Arial Black", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        'JUSTICE'.split('').forEach((ch, i) => x.fillText(ch, W / 2, 560 + i * 62));
+        x.beginPath(); x.moveTo(W / 2, H - 60); x.lineTo(W / 2 - 40, H - 20); x.lineTo(W / 2 + 40, H - 20); x.closePath(); x.fill();
+      });
+      const bMat = new THREE.MeshStandardMaterial({ map: bannerTex, emissiveMap: bannerTex, emissive: 0xffffff, emissiveIntensity: 0.32, roughness: 0.85, side: THREE.DoubleSide });
+      bMat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = this.timeU;
+        shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+float sway = (1.0 - uv.y);
+transformed.z += (sin(uTime * 1.7 + position.y * 0.32) * 0.55 + sin(uTime * 3.1 + position.y * 0.9) * 0.14) * sway;
+transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
+      };
+      bMat.customProgramCacheKey = () => 'banner-wave';
+      for (const sx of [-1, 1]) { const b = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 24, 4, 14), bMat); b.position.set(cx + sx * 14, 36, cz + 9.7); scene.add(b); darkBox(cx + sx * 14, 48.4, cz + 9.7, 7.2, 0.5, 0.7, 0.35); }
+    }
     // monumental Judge statues flanking the approach
     for (const sx of [-1, 1]) {
       const x0 = cx + sx * 21, z0 = cz + 27;
       stone(new THREE.BoxGeometry(7.5, 2.4, 7.5), x0, 1.2, z0, 0.95); stone(new THREE.BoxGeometry(6.2, 1.2, 6.2), x0, 3.0, z0, 1.05);
-      const gp = (g, x, y, z) => { g.translate(x0 + x, y, z0 + z); goldG.push(g); };
-      for (const lx of [-0.95, 0.95]) gp(new THREE.CylinderGeometry(0.75, 0.9, 5.6, 10), lx, 6.4, 0);                   // legs
-      gp(new THREE.BoxGeometry(3.4, 0.7, 2.2), 0, 9.5, 0);                                                             // belt
-      gp(new THREE.BoxGeometry(3.6, 4.6, 2.2), 0, 12.2, 0);                                                            // torso
-      gp(new THREE.CylinderGeometry(1.2, 1.2, 1.3, 12).rotateZ(Math.PI / 2), -2.6, 14.1, 0);                          // ribbed pauldron
-      gp(new THREE.BoxGeometry(2.4, 0.6, 3.0), 2.6, 14.3, 0);                                                          // eagle-wing pauldron
-      for (const ax of [-2.55, 2.55]) gp(new THREE.CylinderGeometry(0.62, 0.55, 4.4, 8), ax, 11.6, 0.2);              // arms
-      gp(new THREE.SphereGeometry(1.35, 14, 10), 0, 15.8, 0);                                                          // helmet
-      gp(new THREE.BoxGeometry(0.35, 0.9, 1.6), 0, 17.3, 0);                                                           // crest
-      neonBox(x0, 15.9, z0 + 1.25, 2.1, 0.42, 0.25, 0xff2020, 2.6);                                                    // red visor
+      // (the statue figure itself is the real hero model, cast in gold: see js/hallstatues.js)
       glow.push({ x: x0, y: 9, z: z0 + 3, c: [1.0, 0.8, 0.45], s: 18, blink: 0, a: 0.12 });
       addBox({ minX: x0 - 3.2, maxX: x0 + 3.2, minZ: z0 - 3.2, maxZ: z0 + 3.2, h: 3.6 });
     }
@@ -761,7 +824,7 @@ export const world = {
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, lamps.length);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
     lamps.forEach((l, i) => { p.set(l.x, 0.06, l.z); s.set(l.r * 2, 1, l.r * 2); m.compose(p, q, s); mesh.setMatrixAt(i, m); mesh.setColorAt(i, l.c); });
-    mesh.frustumCulled = false; mesh.renderOrder = 3; scene.add(mesh);
+    mesh.frustumCulled = false; mesh.renderOrder = 3; scene.add(mesh); (this.mirrorHide ||= []).push(mesh);
   },
 
   buildSmears(scene, list) {
@@ -792,7 +855,7 @@ export const world = {
           gl_FragColor = vec4(vCol.rgb * 1.2, a * vCol.a);
         }`,
     });
-    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; scene.add(mesh);
+    const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 4; scene.add(mesh); (this.mirrorHide ||= []).push(mesh);
   },
 
   // soft light cones under the streetlamps nearest the player: rain streaks glitter inside them
@@ -820,7 +883,7 @@ export const world = {
           gl_FragColor = vec4(1.0, 0.8, 0.52, a);
         }`,
     });
-    this.cones = new THREE.InstancedMesh(geo, mat, 28); this.cones.frustumCulled = false; this.cones.renderOrder = 5; this.cones.count = 0; scene.add(this.cones);
+    this.cones = new THREE.InstancedMesh(geo, mat, 28); this.cones.frustumCulled = false; this.cones.renderOrder = 5; this.cones.count = 0; scene.add(this.cones); (this.mirrorHide ||= []).push(this.cones);
     this.coneT = 0;
   },
 
@@ -916,35 +979,41 @@ export const world = {
   },
 
   buildRain(scene) {
-    // light drizzle: sparse, thin streaks that fade with distance; the density breathes slowly
-    const n = 2600, size = 80;
-    const pos = new Float32Array(n * 2 * 3), end = new Float32Array(n * 2), seed = new Float32Array(n * 2);
-    for (let i = 0; i < n; i++) {
-      const x = rand(size), y = rand(60), z = rand(size), s = Math.random();
-      pos.set([x, y, z, x, y, z], i * 6); end[i * 2] = 0; end[i * 2 + 1] = 1; seed[i * 2] = seed[i * 2 + 1] = s;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('end', new THREE.BufferAttribute(end, 1)); geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+    // instanced camera-facing streaks (GL lines are 1 px and vanish at high resolution): wind-leaned, stretched along their fall, soft edged,
+    // thicker and fainter with distance; the density breathes slowly (level)
+    const n = 6500, size = 84;
+    const base = new THREE.PlaneGeometry(1, 1);
+    const geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.setAttribute('position', base.attributes.position); geo.setAttribute('uv', base.attributes.uv);
+    const iPos = new Float32Array(n * 3), iSeed = new Float32Array(n);
+    for (let i = 0; i < n; i++) { iPos.set([rand(size), rand(60), rand(size)], i * 3); iSeed[i] = Math.random(); }
+    geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(iPos, 3)); geo.setAttribute('iSeed', new THREE.InstancedBufferAttribute(iSeed, 1));
+    geo.instanceCount = n;
     this.rainLevel = 0.3;
     this.rainMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       uniforms: { time: { value: 0 }, cam: { value: new THREE.Vector3() }, size: { value: size }, level: { value: this.rainLevel } },
-      vertexShader: `attribute float end; attribute float seed; uniform float time; uniform vec3 cam; uniform float size; uniform float level; varying float vA;
+      vertexShader: `attribute vec3 iPos; attribute float iSeed; uniform float time; uniform vec3 cam; uniform float size; uniform float level; varying float vA; varying vec2 vUv;
+        float h1(float x){ return fract(sin(x * 91.3458) * 47453.5453); }
         void main(){
-          if (seed > level) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
-          vec3 p = position; float H = 60.0;
-          p.y = mod(p.y - time*38.0, H);
-          p.x += time*2.0;
-          vec3 w = cam + (mod(p - cam + vec3(size*0.5, 30.0, size*0.5), vec3(size, H, size)) - vec3(size*0.5, 30.0, size*0.5));
+          vUv = uv;
+          if (iSeed > level) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vA = 0.0; return; }
+          float speed = 30.0 + 16.0 * h1(iSeed);
+          float H = 60.0;
+          vec3 p = iPos; p.y = mod(p.y - time * speed, H); p.x += time * 2.2;
+          vec3 w = cam + (mod(p - cam + vec3(size * 0.5, 30.0, size * 0.5), vec3(size, H, size)) - vec3(size * 0.5, 30.0, size * 0.5));
           w.y = max(0.0, w.y);
-          float dist = length(w - cam);
-          w += end * vec3(-0.08, 1.05, 0.0);
-          vA = 0.2 * (1.0 - end*0.7) * (1.0 - smoothstep(25.0, 48.0, dist)) * smoothstep(1.5, 5.0, dist);
-          gl_Position = projectionMatrix * viewMatrix * vec4(w,1.0);
+          vec3 toCam = cam - w; float dist = length(toCam); toCam /= max(dist, 1e-3);
+          vec3 vel = normalize(vec3(-0.13, -1.0, 0.02));
+          vec3 side = normalize(cross(vel, toCam));
+          float len = 0.7 + 0.9 * h1(iSeed + 3.1);
+          float width = (0.022 + 0.022 * h1(iSeed + 7.7)) * (1.0 + dist * 0.05);
+          vec3 wp = w + side * (position.x * width) - vel * ((position.y + 0.5) * len);
+          vA = (0.62 - 0.2 * h1(iSeed + 1.7)) * (1.0 - smoothstep(26.0, 52.0, dist)) * smoothstep(2.2, 8.0, dist) / (1.0 + dist * 0.012);
+          gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
         }`,
-      fragmentShader: 'varying float vA; void main(){ gl_FragColor = vec4(0.62,0.74,1.0,vA); }',
+      fragmentShader: 'varying float vA; varying vec2 vUv; void main(){ float e = 1.0 - pow(abs(vUv.x * 2.0 - 1.0), 1.6); float t = 0.25 + 0.75 * vUv.y; gl_FragColor = vec4(vec3(0.62, 0.74, 1.0) * 1.1, vA * e * t); }',
     });
-    const rain = new THREE.LineSegments(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain);
+    const rain = new THREE.Mesh(geo, this.rainMat); rain.frustumCulled = false; rain.renderOrder = 7; scene.add(rain); (this.mirrorHide ||= []).push(rain);
   },
 
   buildFlyers(scene) {

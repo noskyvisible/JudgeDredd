@@ -4,7 +4,7 @@ import { clamp, rand } from './util.js';
 
 // Fully procedural audio: SFX, ambience, engine, siren and a dynamic synth soundtrack.
 let ctx, master, sfxBus, musicBus, reverb, reverbSend, noiseBuf, comp;
-let engine, siren, rainNode;
+let engine, siren, rainNode, rail;
 let musicOn = true, intensity = 0, nextStep = 0, step = 0, started = false;
 const tmpV = new THREE.Vector3();
 const right = new THREE.Vector3();
@@ -82,6 +82,7 @@ export const audio = {
     this.startAmbience();
     this.startEngine();
     this.startSiren();
+    this.startRail();
     nextStep = ctx.currentTime + 0.1;
     started = true;
   },
@@ -124,6 +125,24 @@ export const audio = {
     engine.o2.frequency.setTargetAtTime(base * 0.503, t, 0.08);
     engine.f.frequency.setTargetAtTime(260 + speed01 * 1400 + (boost ? 800 : 0), t, 0.1);
     engine.g.gain.setTargetAtTime(active ? 0.06 + speed01 * 0.07 : 0, t, 0.15);
+  },
+
+  // elevated monorail: bandpassed noise + a low hum that swells as a train passes overhead (level 0..1 from js/monorail.js)
+  startRail() {
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 170; f.Q.value = 0.9;
+    const g = ctx.createGain(); g.gain.value = 0;
+    const hum = ctx.createOscillator(); hum.type = 'sawtooth'; hum.frequency.value = 58;
+    const hf = ctx.createBiquadFilter(); hf.type = 'lowpass'; hf.frequency.value = 260; const hg = ctx.createGain(); hg.gain.value = 0.35;
+    s.connect(f); f.connect(g); hum.connect(hf); hf.connect(hg); hg.connect(g); g.connect(master); g.connect(reverbSend);
+    s.start(); hum.start();
+    rail = { g, f, hum };
+  },
+  setRail(level, approach = 0) {
+    if (!rail) return; const t = ctx.currentTime;
+    rail.g.gain.setTargetAtTime(level * level * 0.2, t, 0.15);
+    rail.f.frequency.setTargetAtTime(140 + level * 320, t, 0.2);
+    rail.hum.frequency.setTargetAtTime(56 + level * 10 + approach * 6, t, 0.2);      // slight doppler: pitch up while it closes, down as it leaves
   },
 
   startSiren() {
