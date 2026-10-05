@@ -40,6 +40,7 @@ scene.add(camera); camera.layers.enable(1);   // layer 1 = ground meshes (hidden
 // ---------------------------------------------------------------- post (js/post.js: bloom pyramid + streaks, filmic tone map, grade)
 const P = createPost(renderer, scene, camera, innerWidth, innerHeight, PR);
 const { composer, post } = P;
+G.gradeTint = post.uniforms.uTint;
 
 // ---------------------------------------------------------------- quality
 const QUALITY = [

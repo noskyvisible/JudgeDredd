@@ -50,6 +50,14 @@ export const SHOTS = {
   judge:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 40, setup: 'judge' },
   bike_side:   { at: [-300, 50, Math.PI / 2], free: { pos: [-299, 1.5, 54.5], look: [-299.3, 1.1, 50], fov: 42 }, settle: 60, setup: 'ride' },
   sky_moon:    { at: [0, 100, Math.PI], free: { pos: [10, 3, 56], look: [-40, 70, -60], fov: 70 }, settle: 20 },
+  air_war: { at: [-452, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_fin: { at: [52, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_neonrow: { at: [452, -480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_alley: { at: [-452, 20, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_park: { at: [452, 20, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_ind: { at: [-452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_market: { at: [52, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
+  air_docks: { at: [452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -91,6 +99,7 @@ for (const name of names) {
     }
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     // settle: let lights hop, traffic spawn, the camera catch up
+    T.world.updateAir(P.pos, 1);   // snap the district atmosphere (fog / sky / grade) to where we stand instead of drifting there
     for (let i = 0; i < sh.settle; i++) { if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; } window.__step(1); }
     if (sh.setup === 'boom') { // a Hi-Ex style explosion ahead of Dredd plus a muzzle flash and some sparks, rendered mid-burst
       const f = T.fx, at = new THREE.Vector3(P.pos.x + 1.5, 0, P.pos.z - 11);

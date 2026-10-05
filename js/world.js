@@ -32,6 +32,16 @@ const PALETTES = [
   [0xff8a30, 0xffb040, 0xff3030], [0xb040ff, 0x40e0ff, 0xff2ea6], [0x40ffd0, 0xffe040, 0xff6a30],
 ];
 
+// Each district has its own atmosphere: [horizon glow, mid sky, fog, hemisphere sky light, grade tint].  update() blends bilinearly between the
+// nine district centres so crossing a district boundary is a slow colour drift, never a pop.
+const AIR = [
+  [[1.00, 0.38, 0.18, 0.20, 0.09, 0.07, 0x2e1410, 0x7a4a3a, [1.04, 0.97, 0.94]], [0.30, 0.62, 1.00, 0.06, 0.12, 0.30, 0x101a30, 0x3a5a9a, [0.96, 0.99, 1.06]], [1.00, 0.20, 0.72, 0.28, 0.06, 0.30, 0x2e1040, 0x8a3a9a, [1.05, 0.96, 1.05]]],
+  [[0.72, 0.85, 0.20, 0.12, 0.16, 0.06, 0x1c2410, 0x5a7a2a, [1.00, 1.04, 0.94]], [0.95, 0.32, 0.36, 0.20, 0.07, 0.30, 0x26143a, 0x5a4a9a, [1.00, 1.00, 1.00]], [0.25, 0.90, 0.60, 0.05, 0.20, 0.20, 0x0e2a24, 0x2a7a6a, [0.95, 1.04, 1.00]]],
+  [[1.00, 0.62, 0.20, 0.24, 0.12, 0.06, 0x2c1e0e, 0x8a6a2a, [1.05, 1.00, 0.93]], [0.95, 0.50, 0.28, 0.12, 0.10, 0.24, 0x1c1a2a, 0x5a5a7a, [1.02, 0.99, 0.98]], [0.50, 0.65, 0.90, 0.07, 0.10, 0.22, 0x141c2a, 0x4a6a8a, [0.96, 1.00, 1.05]]],
+];
+const _ac = new THREE.Color(), _bc = new THREE.Color();
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
 const boxes = [];
 const grid = new Map();
 const gkey = (cx, cz) => cx * 1000 + cz;
@@ -213,17 +223,17 @@ export const world = {
     scene.fog = new THREE.FogExp2(0x26143a, 0.0029);
     this.skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { time: { value: 0 }, flash: { value: 0 } },
+      uniforms: { time: { value: 0 }, flash: { value: 0 }, uHor: { value: new THREE.Color(0.95, 0.32, 0.36) }, uMid: { value: new THREE.Color(0.20, 0.07, 0.30) } },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
       // smog sky: a magenta-orange light-pollution glow at the horizon rising into violet and indigo, two drifting cloud decks that are
       // lit from below by the city (warm) and from above by lightning, plus a faint distant aurora-like neon haze
-      fragmentShader: `varying vec3 vP; uniform float time; uniform float flash;
+      fragmentShader: `varying vec3 vP; uniform float time; uniform float flash; uniform vec3 uHor; uniform vec3 uMid;
         float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
         float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
         float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
         void main(){
           vec3 d = normalize(vP); float y = d.y;
-          vec3 hor = vec3(0.95, 0.32, 0.36), mid = vec3(0.20, 0.07, 0.30), top = vec3(0.025, 0.02, 0.09);
+          vec3 hor = uHor, mid = uMid, top = vec3(0.025, 0.02, 0.09);
           float up = clamp(y, 0.0, 1.0);
           vec3 c = mix(hor, mid, pow(smoothstep(-0.04, 0.55, y), 0.5));
           c = mix(c, top, smoothstep(0.28, 1.0, up));
@@ -254,7 +264,7 @@ export const world = {
     sky.renderOrder = -10; scene.add(sky); this.sky = sky;
 
     // ===== lights =====
-    this.hemi = new THREE.HemisphereLight(0x5a4a9a, 0x2a1a30, 0.6); scene.add(this.hemi);
+    this.hemi = new THREE.HemisphereLight(0x5a4a9a, 0x2a1a30, 0.6); scene.add(this.hemi); this.hemiBase = this.hemi.color.clone();
     this.sun = new THREE.DirectionalLight(0x8aa0ff, 0.5);
     this.sun.position.set(-60, 120, -40);
     this.sun.castShadow = true;
@@ -1039,6 +1049,22 @@ transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
     this.flyGeo = geo;
   },
 
+  // district atmosphere: bilinear blend between the nine district centres (each district is 5 blocks wide); k = how far to move toward the target this call
+  updateAir(center, k) {
+    const u = clamp((center.x + HALF) / (S * 5) - 0.5, 0, 2), v = clamp((center.z + HALF) / (S * 5) - 0.5, 0, 2);
+    const i0 = Math.min(1, Math.floor(u)), j0 = Math.min(1, Math.floor(v)), fu = u - i0, fv = v - j0;
+    const at = (i, j) => AIR[j][i];
+    const lerpCol = (idx, out) => { _ac.setHex(at(i0, j0)[idx]).lerp(_bc.setHex(at(i0 + 1, j0)[idx]), fu); const top = _ac.clone(); _ac.setHex(at(i0, j0 + 1)[idx]).lerp(_bc.setHex(at(i0 + 1, j0 + 1)[idx]), fu); out.copy(top.lerp(_ac, fv)); };
+    const blend3 = (a, b, c) => { const t = mix3(a, b, fu), s = mix3(c.a, c.b, fu); return mix3(t, s, fv); };
+    const rgb = (e, o) => [e[o], e[o + 1], e[o + 2]];
+    const A = at(i0, j0), B = at(i0 + 1, j0), C = at(i0, j0 + 1), D = at(i0 + 1, j0 + 1);
+    const hor = blend3(rgb(A, 0), rgb(B, 0), { a: rgb(C, 0), b: rgb(D, 0) }), mid = blend3(rgb(A, 3), rgb(B, 3), { a: rgb(C, 3), b: rgb(D, 3) }), tint = blend3(A[8], B[8], { a: C[8], b: D[8] });
+    this.skyMat.uniforms.uHor.value.lerp(_ac.setRGB(hor[0], hor[1], hor[2]), k); this.skyMat.uniforms.uMid.value.lerp(_ac.setRGB(mid[0], mid[1], mid[2]), k);
+    lerpCol(6, _bc); this.scene.fog.color.lerp(_bc, k);
+    lerpCol(7, _bc); this.hemiBase = this.hemiBase || new THREE.Color(); this.hemiBase.lerp(_bc, k); this.hemi.color.copy(this.hemiBase);
+    if (G.gradeTint) G.gradeTint.value.set(tint[0], tint[1], tint[2]);
+  },
+
   update(dt, center) {
     const t = G.time;
     this.skyMat.uniforms.time.value = t;
@@ -1048,6 +1074,7 @@ transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
     this.updateLights(dt, center);
     for (const s of this.searchlights) { s.rotation.y = t * 0.22 + s.userData.ph; s.rotation.z = 0.32 + 0.18 * Math.sin(t * 0.31 + s.userData.ph * 1.7); }
     this.rainMat.uniforms.cam.value.copy(G.camera.position);
+    this.updateAir(center, Math.min(1, dt * 0.8));
     for (const h of this.holos) h.rotation.y = Math.atan2(G.camera.position.x - h.position.x, G.camera.position.z - h.position.z);
     this.rainLevel = 0.3 + 0.2 * Math.sin(t * 0.045) + 0.12 * Math.sin(t * 0.13 + 1.7) + this.lightning * 0.25; this.rainMat.uniforms.level.value = clamp(this.rainLevel, 0.12, 0.75);
     this.sun.position.set(center.x - 50, 130, center.z - 30);

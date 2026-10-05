@@ -217,6 +217,7 @@ const SCRUB = {
 const FINAL = {
   uniforms: {
     tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null }, tAO: { value: null }, uAO: { value: 1 }, uDbg: { value: 0 }, uFade: { value: 1 },
+    uTint: { value: new THREE.Vector3(1, 1, 1) },
     tDepth: { value: null }, uDof: { value: 0 }, uFocus: { value: 10 }, uAperture: { value: 1.6 }, uNear: { value: 0.1 }, uFar: { value: 1000 },
     time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) },
     uBloom: { value: 0.55 }, uStreak: { value: 0.5 }, uExposure: { value: 1.12 },
@@ -225,7 +226,7 @@ const FINAL = {
     shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
   },
   vertexShader: VERT,
-  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO, tDepth; uniform float uAO, uDbg, uFade, uDof, uFocus, uAperture, uNear, uFar; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO, tDepth; uniform float uAO, uDbg, uFade, uDof, uFocus, uAperture, uNear, uFar; uniform vec3 uTint; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
     vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -300,6 +301,7 @@ const FINAL = {
       g = mix(vec3(l), g, sat);
       g = (g - 0.5) * contrast + 0.5;
       g += vec3(-0.012, 0.004, 0.032) * (1.0 - smoothstep(0.0, 0.5, l)) + vec3(0.03, 0.012, -0.015) * smoothstep(0.45, 1.0, l);
+      g *= uTint;                                                       // district grade (set by the world as you cross districts)
       g += vec3(0.55, 0.6, 0.9) * flash * 0.12;
       g *= 1.0 - d2 * vig * 2.0;
       g = mix(g, g * vec3(1.15, 0.55, 0.55), hurt * smoothstep(0.1, 0.45, d2));
