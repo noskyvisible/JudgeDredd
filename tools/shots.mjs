@@ -83,7 +83,7 @@ for (const name of names) {
       if (!window.__flyers) { const F = await import('/js/flyers.js'); window.__flyers = F.createFlyers(G.scene, { count: 32 }); }
     }
     if (sh.setup === 'traffic') {   // a stream of traffic in both directions along the x=450 street
-      const cs = G.traffic.cars.slice(0, 10);
+      const pol = G.traffic.cars.find((c) => c.kind === 'police'); const cs = G.traffic.cars.filter((c) => c !== pol).slice(0, 9); if (pol) { pol.lightsOn = true; cs.splice(2, 0, pol); }
       cs.forEach((c, i) => { const north = i % 2 === 0; c.dead = false; c.model.visible = true; c.yaw = north ? 0 : Math.PI; c.pos.set(450 + (north ? -5 : 5), 0, -520 - 10 + Math.floor(i / 2) * 15 + (north ? 0 : 8)); c.speed = c.maxSpeed = 9; c.vx = 0; c.vz = 0; c.extendPath(); });
     }
     if (sh.setup === 'cars') {

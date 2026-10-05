@@ -461,7 +461,7 @@ export function makeLawmasterModel(pal = {}) {
     kit.add(rod(V3(p.x, p.y + 0.03, p.z - 0.04), V3(p.x, 1.16, p.z - 0.06), 0.012, 6), mats.gun, inner);
   }
   for (const s of [-1, 1]) {
-    kit.add(patch(fairFn, Z1 - 0.36, Z1 - 0.14, s < 0 ? 0.31 : 0.64, s < 0 ? 0.36 : 0.69, 8, 2, { offset: 0.004 }), s > 0 ? mats.amberL : mats.amberR, inner);   // indicator strips
+    kit.add(patch(fairFn, Z1 - 0.34, Z1 - 0.14, s < 0 ? 0.325 : 0.65, s < 0 ? 0.35 : 0.675, 8, 1, { offset: 0.004 }), s > 0 ? mats.amberL : mats.amberR, inner);   // indicator strips
     if (s > 0) kit.add(patch(fairFn, Z0 + 0.98, Z0 + 0.36, 0.79, 0.67, 14, 4, { offset: 0.004, swapUV: true }), mats.badge, inner);      // LAWMASTER, reads front -> back
     else kit.add(patch(fairFn, Z0 + 0.36, Z0 + 0.98, 0.21, 0.33, 14, 4, { offset: 0.004, swapUV: true }), mats.badge, inner);
   }
@@ -719,8 +719,8 @@ export function updateLawmasterVisuals(bike, dt) {
   M.lens.color.setRGB(1.0, 0.95, 0.86).multiplyScalar(live ? (on ? 3.2 : 1.3) : 0.05);
   M.drl.color.setRGB(0.75, 0.9, 1.0).multiplyScalar(live ? 2.6 : 0.05);
   const blink = Math.floor(V.t * 3.2) % 2 === 0, st = bike.steer || 0, turning = asp < 22 && Math.abs(st) > 0.45;
-  M.amberL.color.setRGB(1, 0.5, 0.06).multiplyScalar(((turning && st < 0) || bike.crashed) && blink ? 3.2 : 0.3 * (live ? 1 : 0.1));
-  M.amberR.color.setRGB(1, 0.5, 0.06).multiplyScalar(((turning && st > 0) || bike.crashed) && blink ? 3.2 : 0.3 * (live ? 1 : 0.1));
+  M.amberL.color.setRGB(1, 0.5, 0.06).multiplyScalar(((turning && st < 0) || bike.crashed) && blink ? 3.2 : 0.09 * (live ? 1 : 0.3));
+  M.amberR.color.setRGB(1, 0.5, 0.06).multiplyScalar(((turning && st > 0) || bike.crashed) && blink ? 3.2 : 0.09 * (live ? 1 : 0.3));
   const rpm = 4 + asp * 0.35 + (c.throttle || 0) * 6;
   V.boostK = damp(V.boostK, bike.boosting ? 1 : 0, bike.boosting ? 10 : 3, dt || 1);
   const pulse = 0.5 + 0.5 * Math.sin(V.t * rpm);
@@ -854,9 +854,9 @@ export function ridePoseIK(ch, bike) {
     // ---------------- arms (chest space) ----------------
     const a1 = Math.abs(ch.elL.position.y) || 0.38, a2 = Math.abs(ch.wrL.position.y) || 0.38;
     const gOff = ch.gripOffset || GRIP_OFF;                   // grip centre in hand space (a rig may override it)
-    _M.copy(ch.chest.matrixWorld).invert();
     const arm = (L) => {
       const sh = L ? ch.shL : ch.shR, wr = L ? ch.wrL : ch.wrR;
+      _M.copy((sh.parent || ch.chest).matrixWorld).invert();                                                   // solve in the shoulder's parent space (chest today)
       _t.copy(L ? A.gripL : A.gripR); u.front.localToWorld(_t); _t.applyMatrix4(_M);                         // grip -> chest space
       _x.copy(L ? A.gripAxisL : A.gripAxisR).transformDirection(u.front.matrixWorld).transformDirection(_M);   // bar axis -> chest space
       if (_x.x < 0) _x.negate();                                                                               // hand +X = rider's left
@@ -888,14 +888,15 @@ export function ridePoseIK(ch, bike) {
 
     // ---------------- legs (hips space) ----------------
     const l1 = Math.abs(ch.knL.position.y) || 0.46, l2 = Math.abs(ch.anL.position.y) || 0.4;
-    const hipsInv = ch.hips.getWorldQuaternion(_QH).invert(), innerQ = u.inner.getWorldQuaternion(_QI);
+    const innerQ = u.inner.getWorldQuaternion(_QI);
     const leg = (L) => {
-      const hp = L ? ch.hipL : ch.hipR, an = L ? ch.anL : ch.anR, out = L ? 1 : -1;
+      const hp = L ? ch.hipL : ch.hipR, an = L ? ch.anL : ch.anR, out = L ? 1 : -1, hpar = hp.parent || ch.hips;
+      const hipsInv = hpar.getWorldQuaternion(_QH).invert();
       // foot frame in bike space: toes forward + a little out, sole level with the toe dipped slightly
       _z.set(out * 0.14, -0.1, 1).normalize(); _y.set(0, 1, 0); _x.crossVectors(_y, _z).normalize(); _y.crossVectors(_z, _x).normalize();
       qFoot.setFromRotationMatrix(_MB.makeBasis(_x, _y, _z)).premultiply(innerQ).premultiply(hipsInv);
       // the ball of the foot rests on top of the peg
-      _t.copy(L ? A.pegL : A.pegR); _t.y += 0.034; u.inner.localToWorld(_t); ch.hips.worldToLocal(_t);
+      _t.copy(L ? A.pegL : A.pegR); _t.y += 0.034; u.inner.localToWorld(_t); hpar.worldToLocal(_t);
       _w.copy(BALL_OFF).applyQuaternion(qFoot); _w.subVectors(_t, _w).sub(hp.position);
       const r = planarIK(l1, l2, _w.x, _w.y, _w.z, true);
       _ax.copy(_w).normalize();

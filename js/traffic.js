@@ -232,6 +232,13 @@ export class Traffic {
         G1.add(_lp, _ld, 2.0, 0.12, 0.08, 0.5 + bk * 0.45, 0.32 + bk * 0.12);
         if (toCamF < -2) W.add(_lp, cam, 1.6, 0.08, 0.05, 0.38 + bk * 0.4, 0.42, 3.2);
       }
+      // police light bar flare (follows the strobe pattern animateCar writes)
+      const lb = u.lightbar;
+      if (lb && c.lightsOn) {
+        const kr = Math.max(0, (lb.red.color.r - 0.3) / 4), kb = Math.max(0, (lb.blue.color.b - 0.3) / 4), y = u.height + 0.12, z = -0.25;
+        if (kr > 0.02) { _lp.set(c.pos.x + rx * 0.3 + fx_ * z, y, c.pos.z + rz * 0.3 + fz_ * z); G1.add(_lp, _lq.subVectors(cam, _lp).normalize(), 2.6, 0.15, 0.1, kr, 1.1); }   // strobes shine all round
+        if (kb > 0.02) { _lp.set(c.pos.x - rx * 0.3 + fx_ * z, y, c.pos.z - rz * 0.3 + fz_ * z); G1.add(_lp, _lq.subVectors(cam, _lp).normalize(), 0.25, 0.5, 2.8, kb, 1.1); }
+      }
     }
     G1.end(); W.end();
   }
