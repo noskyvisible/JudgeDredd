@@ -176,6 +176,20 @@ L.thug = [
     top: { kind: 'hoodie', swatch: 'hoodie', sleeveSwatch: 'hoodieSleeve', len: 'hip', sleeves: 'rolled' }, shirt: { swatch: 'shirtPlain' }, armSkin: 'armFlames',
     legs: { swatch: 'legJeans', pelvis: 'pelvisJeans' }, feet: { kind: 'combat', swatch: 'bootCombat' }, acc: [] },
 ];
+L.thug.push(
+  { pal: { armor: [[0x8a1414, 0x14408a, 0x1e6a2a, 0x5a1e6a, 0xa86a0e, 0x2a2a2e]] }, body: { b: 1.06, belly: 0.08 }, head: { jawW: 0.96, chinW: 0.62, brow: 0.016, nose: { w: 1.2 } }, face: 'faceThugA', eyes: 'eyeB', hair: { kind: 'buzz' }, beard: { kind: 'full', t: 0.014 },
+    top: { kind: 'hoodie', swatch: 'hoodie', sleeveSwatch: 'hoodieSleeve', len: 'hip', collar: 'hood', hoodSwatch: 'hoodieHood' }, shirt: { swatch: 'shirtPlain' },
+    legs: { swatch: 'legCargo', pelvis: 'pelvisCargo' }, feet: { kind: 'work', swatch: 'bootWork' }, acc: [] },
+  { pal: { armor: [[0x101014, 0xa01818, 0x1838a0, 0x187030], [0xe8e8e0, 0xf0c020]], under: [[0x101014, 0xa01818, 0x1838a0]] }, body: { b: 0.98 }, head: { jawW: 0.88, chin: 0.012 }, face: 'faceThugB', eyes: 'eyeA', hair: { kind: 'buzz' }, hat: { kind: 'bandana', swatch: 'bandana' },
+    top: { kind: 'jacket', swatch: 'track', sleeveSwatch: 'trackSleeve', len: 'waist', collar: 'band', collarSwatch: 'trackCollar' }, shirt: { swatch: 'shirtPlain' },
+    legs: { swatch: 'legTrack', pelvis: 'pelvisTrack' }, feet: { kind: 'sneaker', swatch: 'bootSneaker' }, acc: [] },
+  { body: { b: 1.0 }, head: { jawW: 0.9, brow: 0.015, nose: { crook: 1.2 } }, face: 'faceThugC', eyes: 'eyeA', hair: { kind: 'buzz' }, hat: { kind: 'cap', swatch: 'cap', backwards: true }, armSkin: 'armSkulls',
+    top: { kind: 'jacket', swatch: 'leather', sleeveSwatch: 'leatherSleeve', len: 'waist', sleeves: 'rolled', collar: 'shirt', collarSwatch: 'leatherCollar', collarGap: 0.42 }, shirt: { swatch: 'shirtPlain' },
+    legs: { swatch: 'legJeans', pelvis: 'pelvisJeans' }, feet: { kind: 'combat', swatch: 'bootCombat' }, acc: [{ kind: 'belt', swatch: 'beltStud' }] },
+  { body: { b: 1.03, armK: 1.06 }, head: { jawW: 0.94, chinW: 0.58 }, face: 'faceThugD', eyes: 'eyeA', hair: { kind: 'mohawk', height: 0.085 },
+    top: { kind: 'jacket', swatch: 'bomber', sleeveSwatch: 'bomberSleeve', len: 'waist', collar: 'band', collarSwatch: 'bomberCollar', gap: 0.22, gapY0: 1.45 }, shirt: { swatch: 'shirtPrint' },
+    legs: { swatch: 'legCargo', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, acc: [{ kind: 'belt' }] },
+);
 L.gunman = [
   { body: { b: 1.0 }, head: { jawW: 0.9 }, face: 'faceGunA', eyes: 'eyeA', mask: { kind: 'balaclava', swatch: 'balaclava' }, hat: null, eyewear: { kind: 'goggles', glow: true },
     top: { kind: 'vest', straps: true, swatch: 'plateCarrier', len: 'waist', y0: 1.12, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'long', sleeveSwatch: 'sleeveTac' },
@@ -190,6 +204,14 @@ L.gunman = [
     top: { kind: 'jacket', swatch: 'fieldJacket', sleeveSwatch: 'fieldSleeve', len: 'hip', collar: 'shirt', collarSwatch: 'fieldCollar', collarGap: 0.42, gap: 0.25, gapY0: 1.45 }, shirt: { swatch: 'shirtTac' },
     legs: { swatch: 'legPadded', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'kneepads' }, { kind: 'bandolier' }, { kind: 'holster' }] },
 ];
+L.gunman.push(
+  { body: { b: 1.02 }, head: { jawW: 0.92 }, face: 'faceGunA', eyes: 'eyeA', mask: { kind: 'balaclava', swatch: 'balaclava' }, hat: { kind: 'cap', swatch: 'capTac' }, eyewear: { kind: 'goggles', glow: true },
+    top: { kind: 'jacket', swatch: 'fieldCamo', sleeveSwatch: 'fieldCamoSleeve', len: 'hip', collar: 'shirt', collarSwatch: 'fieldCollar', collarGap: 0.42 }, shirt: { swatch: 'shirtTac' },
+    legs: { swatch: 'legCargo', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'holster' }] },
+  { body: { b: 1.04 }, head: { jawW: 0.94, brow: 0.015 }, face: 'faceGunB', eyes: 'eyeB', hair: { kind: 'buzz' }, hat: { kind: 'beanie', swatch: 'beanie' }, mask: { kind: 'respirator', swatch: 'respirator' },
+    top: { kind: 'vest', straps: true, swatch: 'plateCarrier', len: 'waist', y0: 1.12, sleeves: 'none', off: 0.04 }, shirt: { swatch: 'shirtTac', sleeves: 'long', sleeveSwatch: 'sleeveTac' },
+    legs: { swatch: 'legPadded', pelvis: 'pelvisCargo' }, feet: { kind: 'combat', swatch: 'bootCombat' }, hands: { glove: 'gloveTac' }, acc: [{ kind: 'belt' }, { kind: 'kneepads' }, { kind: 'pouches' }, { kind: 'bandolier' }] },
+);
 L.brute = [
   { body: { b: 1.3, W: 0.53, armK: 1.62, legK: 1.32, neckK: 1.55, chest: 1.12 }, head: { jawW: 1.0, chinW: 0.7, brow: 0.02, cranium: 0.95, nose: { w: 1.4, crook: 1.5 } }, face: 'faceBrute', eyes: 'eyeA', hat: { kind: 'helmetRiot', swatch: 'helmetRiot' },
     top: { kind: 'suit', swatch: 'riotSuit', sleeveSwatch: 'riotSleeve', len: 'hip', off: 0.018 }, shirt: { swatch: 'shirtTac' },
@@ -201,6 +223,11 @@ L.brute = [
     top: { kind: 'suit', swatch: 'riotSuit', sleeveSwatch: 'riotSleeve', len: 'hip', off: 0.018 }, shirt: { swatch: 'shirtTac' },
     legs: { swatch: 'legPadded', pelvis: 'pelvisArmor' }, feet: { kind: 'combat', swatch: 'bootCombat', size: 1.1 }, hands: { glove: 'gloveTac', size: 1.35 }, acc: [{ kind: 'belt' }, { kind: 'chestplate' }, { kind: 'pauldrons', big: true }, { kind: 'gauntlets' }, { kind: 'greaves' }, { kind: 'shieldArm' }] },
 ];
+L.brute.push(
+  { body: { b: 1.3, W: 0.54, armK: 1.64, legK: 1.32, neckK: 1.55, chest: 1.12 }, head: { jawW: 1.0, chinW: 0.72, brow: 0.021 }, face: 'faceBrute', eyes: 'eyeA', hat: { kind: 'helmetRiot', swatch: 'helmetRiot' }, armSkin: 'armSkulls',
+    top: { kind: 'suit', swatch: 'riotSuit', sleeveSwatch: 'riotSleeve', len: 'hip', sleeves: 'none', off: 0.018 }, shirt: { swatch: 'shirtTac', sleeves: 'none' },
+    legs: { swatch: 'legPadded', pelvis: 'pelvisArmor' }, feet: { kind: 'combat', swatch: 'bootCombat', size: 1.1 }, hands: { glove: 'gloveTac', size: 1.4 }, acc: [{ kind: 'belt' }, { kind: 'chestplate' }, { kind: 'pauldrons', big: true }, { kind: 'gauntlets' }, { kind: 'greaves' }] },
+);
 L.junkie = [
   { body: { b: 0.84, gaunt: 1, hunch: 0.8, armK: 0.74, legK: 0.78, neckK: 0.8 }, head: { gaunt: 0.012, cheek: 0.01, jawW: 0.82, chinW: 0.45, sock: 0.016, nose: { len: 1.1 } }, face: 'faceJunkA', eyes: 'eyeJunk', glowEyes: true, asym: 0.03, hair: { kind: 'spiky', len: 0.08, count: 22 },
     top: { kind: 'hoodie', swatch: 'ragHoodie', sleeveSwatch: 'ragSleeve', len: 'hip', sleeves: 'rolled', collar: 'hood', hoodSwatch: 'ragHood' }, shirt: { swatch: 'shirtDirty' }, armSkin: 'armTracks',
@@ -212,6 +239,14 @@ L.junkie = [
     top: { kind: 'jacket', swatch: 'ragJacket', sleeveSwatch: 'ragJacketSleeve', len: 'waist', gap: 0.5, gapY0: 1.1, collar: 'band', collarSwatch: 'ragJacketSleeve' }, shirt: { swatch: 'shirtDirty' },
     legs: { swatch: 'legTrack', pelvis: 'pelvisTrack', k: 0.9 }, feet: { kind: 'sneaker', swatch: 'bootSneaker' }, acc: [{ kind: 'veins' }] },
 ];
+L.junkie.push(
+  { body: { b: 0.83, gaunt: 1, hunch: 0.9, armK: 0.73, legK: 0.77, neckK: 0.8 }, head: { gaunt: 0.013, cheek: 0.01, jawW: 0.8, chinW: 0.44, sock: 0.016 }, face: 'faceJunkB', eyes: 'eyeJunk', glowEyes: true, asym: 0.03, hat: { kind: 'hood', swatch: 'ragHood' },
+    top: { kind: 'hoodie', swatch: 'ragHoodie', sleeveSwatch: 'ragSleeve', len: 'hip', sleeves: 'rolled' }, shirt: { swatch: 'shirtDirty' }, armSkin: 'armTracks',
+    legs: { swatch: 'legRipped', pelvis: 'pelvisJeans', k: 0.9 }, feet: { kind: 'sneaker', swatch: 'bootSneaker' }, acc: [{ kind: 'veins' }] },
+  { body: { b: 0.85, gaunt: 0.9, hunch: 0.8, armK: 0.74, legK: 0.78 }, head: { gaunt: 0.011, jawW: 0.83, sock: 0.015, nose: { len: 1.15, crook: -1 } }, face: 'faceJunkA', eyes: 'eyeJunk', glowEyes: true, asym: 0.03, hair: { kind: 'spiky', len: 0.06, count: 26, seed: 19 },
+    top: { kind: 'jacket', swatch: 'ragJacket', sleeveSwatch: 'ragJacketSleeve', len: 'waist', gap: 0.55, gapY0: 1.06, sleeves: 'rolled', collar: 'band', collarSwatch: 'ragJacketSleeve' }, shirt: { swatch: 'shirtDirty' }, armSkin: 'armTracks',
+    legs: { swatch: 'legRipped', pelvis: 'pelvisJeans', k: 0.9 }, feet: { kind: 'sneaker', swatch: 'bootSneaker' }, acc: [{ kind: 'belt' }, { kind: 'veins' }] },
+);
 L.biker = [
   { body: { b: 1.04 }, head: { jawW: 0.9 }, face: 'faceThugA', eyes: 'eyeA', hat: { kind: 'helmetFull', swatch: 'helmet', visor: 'visorTint' },
     top: { kind: 'jacket', swatch: 'leathers', sleeveSwatch: 'leathersSleeve', len: 'waist', collar: 'band', collarSwatch: 'leathersCollar' }, shirt: { swatch: 'shirtPlain' },
@@ -220,6 +255,11 @@ L.biker = [
     top: { kind: 'jacket', swatch: 'leathers', sleeveSwatch: 'leathersSleeve', len: 'waist', collar: 'band', collarSwatch: 'leathersCollar' }, shirt: { swatch: 'shirtPlain' },
     legs: { swatch: 'legLeather', pelvis: 'pelvisLeather' }, feet: { kind: 'biker', swatch: 'bootBiker' }, hands: { glove: 'gloveLeather', cuff: true }, acc: [{ kind: 'belt', swatch: 'beltStud' }, { kind: 'kneepads' }] },
 ];
+L.biker.push(
+  { pal: { armor: [[0xe8e8e8, 0x14141a], [0xc01020, 0x1838c0, 0x101014]] }, body: { b: 1.06 }, head: { jawW: 0.9 }, face: 'faceThugB', eyes: 'eyeA', hat: { kind: 'helmetFull', swatch: 'helmetFlames', visor: 'visorTint' },
+    top: { kind: 'jacket', swatch: 'leathers', sleeveSwatch: 'leathersSleeve', len: 'waist', collar: 'band', collarSwatch: 'leathersCollar' }, shirt: { swatch: 'shirtPlain' },
+    legs: { swatch: 'legLeather', pelvis: 'pelvisLeather' }, feet: { kind: 'biker', swatch: 'bootBiker' }, hands: { glove: 'gloveLeather', cuff: true }, acc: [{ kind: 'belt' }, { kind: 'kneepads' }] },
+);
 L.boss = [
   { body: { b: 1.42, W: 0.6, armK: 1.5, legK: 1.32, neckK: 1.5, belly: 0.24, chest: 1.08 }, head: { jawW: 1.0, chinW: 0.68, jowl: 0.01, brow: 0.018, cranium: 1.02, nose: { w: 1.3, tip: 1.2 } }, face: 'faceBossA', eyes: 'eyeBoss', hair: { kind: 'bald' },
     top: { kind: 'coat', swatch: 'coat', sleeveSwatch: 'coatSleeve', len: 'coat', gap: 0.5, gapY0: 0.86, gapY1: 1.2, collar: 'fur', collarSwatch: 'fur', off: 0.03 }, shirt: { swatch: 'shirtDress' },
@@ -228,6 +268,11 @@ L.boss = [
     top: { kind: 'coat', swatch: 'coat', sleeveSwatch: 'coatSleeve', len: 'coat', gap: 0.55, gapY0: 0.86, gapY1: 1.25, collar: 'fur', collarSwatch: 'fur', off: 0.03 }, shirt: { swatch: 'shirtDress' },
     legs: { swatch: 'legSlacks', pelvis: 'pelvisSlacks' }, feet: { kind: 'dress', swatch: 'shoeDress', size: 1.06 }, hands: { size: 1.25 }, acc: [{ kind: 'belt' }, { kind: 'coatTails' }, { kind: 'chain' }, { kind: 'rings' }, { kind: 'pauldrons', boss: true }] },
 ];
+L.boss.push(
+  { body: { b: 1.44, W: 0.61, armK: 1.52, legK: 1.33, neckK: 1.55, belly: 0.28, chest: 1.06 }, head: { jawW: 1.02, chinW: 0.7, jowl: 0.012, brow: 0.018, nose: { w: 1.35, crook: 1.3 } }, face: 'faceBossA', eyes: 'eyeBoss', hair: { kind: 'bald' }, beard: { kind: 'full', t: 0.016 },
+    top: { kind: 'coat', swatch: 'coat', sleeveSwatch: 'coatSleeve', len: 'coat', gap: 0.52, gapY0: 0.86, gapY1: 1.22, collar: 'fur', collarSwatch: 'fur', off: 0.03 }, shirt: { swatch: 'shirtDress' },
+    legs: { swatch: 'legSlacks', pelvis: 'pelvisSlacks' }, feet: { kind: 'dress', swatch: 'shoeDress', size: 1.06 }, hands: { size: 1.25 }, acc: [{ kind: 'belt' }, { kind: 'coatTails' }, { kind: 'chain' }, { kind: 'rings' }, { kind: 'cigar' }, { kind: 'pauldrons', boss: true }] },
+);
 L.civ = [
   { sex: 'm', body: { b: 0.95, armK: 0.86 }, face: 'faceCivM', eyes: 'eyeC', hair: { kind: 'cap', vol: 0.02, top: 0.4, quiff: 0.5 }, top: { kind: 'coat', swatch: 'coatCiv', sleeveSwatch: 'coatCivSleeve', len: 'thigh', collar: 'shirt', collarSwatch: 'coatCivCollar', gap: 0.3, gapY0: 1.45 }, shirt: { swatch: 'shirtDress' }, legs: { swatch: 'legSlacks', pelvis: 'pelvisSlacks' }, feet: { kind: 'dress', swatch: 'shoeDress' }, acc: [{ kind: 'scarf' }, { kind: 'coatTails', swatch: 'coatCivSleeve', len: 0.46 }] },
   { sex: 'm', body: { b: 1.0, belly: 0.15, armK: 0.9 }, face: 'faceCivM2', eyes: 'eyeC', hair: { kind: 'cap', vol: 0.014, top: 0.2 }, hat: { kind: 'cap', swatch: 'cap' }, top: { kind: 'jacket', swatch: 'parka', sleeveSwatch: 'parkaSleeve', len: 'hip', collar: 'hood', hoodSwatch: 'parkaHood' }, shirt: { swatch: 'shirtPlaid' }, legs: { swatch: 'legJeans', pelvis: 'pelvisJeans' }, feet: { kind: 'work', swatch: 'bootWork' }, acc: [{ kind: 'belt' }] },

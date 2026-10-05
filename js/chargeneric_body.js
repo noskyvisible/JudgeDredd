@@ -748,8 +748,11 @@ const HAIR = {
 const BEARD = {
   full(c, b, toRig) {
     const { H, K, SK, spec } = c, face = SK.uv(spec.face);
-    const P = headShell(H, { cols: 22, rows: 8, ph0: -1.75, ph1: 1.75, th0: thOfY(-0.12), thMax: (ph) => thOfY(-0.98), kPow: 1,
-      off: (th, ph, k) => { const Y = Math.cos(th); const edge = sstep(0, 0.25, Math.abs(ph) < 1.6 ? 1 - Math.abs(ph) / 1.75 : 0) * sstep(-0.1, -0.3, Y); const mouth = 1 - 0.9 * gauss((Y + 0.47) / 0.07) * gauss(ph / 0.42); return (b.t ?? 0.012) * edge * mouth * (1 + 0.5 * sstep(-0.6, -0.95, Y)); } });
+    // beard line: high at the sideburns, dipping over the cheeks; the shell shares the head's normals so its
+    // tucked edge melts into the skin (the painted stubble/beard on the face texture carries the colour)
+    const line = (ph) => { const a = Math.abs(ph); return -0.36 + 0.3 * sstep(0.55, 1.45, a); };
+    const P = headShell(H, { cols: 22, rows: 8, ph0: -1.75, ph1: 1.75, th0: thOfY(0.02), thMax: () => thOfY(-0.98), kPow: 1, analytic: true,
+      off: (th, ph, k) => { const Y = Math.cos(th); const edge = sstep(0, 0.25, Math.abs(ph) < 1.6 ? 1 - Math.abs(ph) / 1.75 : 0) * sstep(line(ph), line(ph) - 0.14, Y); const mouth = 1 - 0.9 * gauss((Y + 0.47) / 0.07) * gauss(ph / 0.42); return (b.t ?? 0.012) * edge * mouth * (1 + 0.5 * sstep(-0.6, -0.95, Y)); } });
     toRig(P); K.add('head', 'skin', P, { rect: face, group: 'head', aoK: 0.4 });
   },
 };
