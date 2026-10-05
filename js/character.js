@@ -135,7 +135,7 @@ export class Character {
     this._ix = new Float64Array(NJ * 3); this._iv = new Float64Array(NJ * 3); this._iT = 99; this._iW = 18; this._iPend = false;
     this._src = new Float64Array(10); this._srcV = new Float64Array(10); this._srcA = new Float64Array(10); this._srcNew = new Float64Array(10); this._srcOk = 0;
     this._m = { px: 0, pz: 0, yaw: 0, init: false, dtPrev: 1 / 60 };
-    this._inp = { vx: 0, vz: 0, w: 0, intended: 0, tele: true, S };
+    this._inp = { vx: 0, vz: 0, w: 0, intended: 0, tele: true, S: st.scale };   // (the model may have adjusted the scale)
     this._gopt = { stance: null, ready: false, noCycle: false, freezeFeet: false };
     this._look = new THREE.Vector3(); this._hasLook = false; this._lookW = 0; this._lookA = 0; this._lookP = 0;
     this._scan = { t: 2 + Math.random() * 5, yaw: 0, pitch: 0, on: false };
@@ -309,6 +309,7 @@ export class Character {
   _updateOverride(dt) {
     const B = this.base, cur = this.cur, ev = this.events, buf = cur.buf;
     B.buf.fill(0);
+    this._dispRoll = 0; this._pivY = 0.9; this._cY = 0.9; this._lift = 0;   // before the override: it may applyPose() and read joints back
     this.override(B, dt);
     buf.set(B.buf);
     const C = this.clip;
@@ -322,7 +323,7 @@ export class Character {
       if (!this.hitFired && k >= C.hit) { this.hitFired = true; ev.push('hit'); }
       if (k >= 1 && !this.clipDone) { this.clipDone = true; ev.push('done'); if (!this.clipHold) this.clip = null; }
     }
-    this._m.init = false; this._hasOut = false; this._dispRoll = 0; this._pivY = 0.9; this._cY = 0.9;
+    this._m.init = false; this._hasOut = false;
     this.applyPose(cur);
     return ev;
   }
@@ -363,7 +364,10 @@ export class Character {
       // shoved / knocked back (moving without walking): the planted feet skid along part of the way while the stepper stumbles
       const keep = 1 - Math.min(0.7, (ms - 1) / 4); mvx *= keep; mvz *= keep;
     }
-    inp.vx = mvx; inp.vz = mvz; inp.w = w; inp.intended = want; inp.tele = tele;
+    // the gait converts m/s to rig units with the (vertical) style scale; models may stretch the rig horizontally (per-instance
+    // bulk), so hand it velocities in those units or planted feet would creep
+    const S = this.style.scale, hs = S / (this.rigRoot.scale.x || S);
+    inp.vx = mvx * hs; inp.vz = mvz * hs; inp.w = w; inp.intended = want; inp.tele = tele; inp.S = S;
     if (tele) { this._hasOut = false; this.spr.reset(); this._srcOk = 0; }
   }
 
@@ -506,6 +510,8 @@ export class Character {
       m3EulerYXZ(_mF, buf[fto], buf[fto + 1], buf[fto + 2]);
       m3TMul(_mA, _mK, _mF);
       eulerXYZ(_mA, buf, ao);
+      // a planted foot whose ankle runs out of dorsiflexion (long boots late in a long stance) tells the gait to peel it off
+      const gf = this.gait.feet[s]; gf.flex = gf.planted && buf[ao] < -0.74;
       buf[ao] = clamp(buf[ao], -0.8, 0.95); buf[ao + 1] = clamp(buf[ao + 1], -0.45, 0.45); buf[ao + 2] = clamp(buf[ao + 2], -0.44, 0.44);
       if (C && C.legFK[s] && w > 0) {
         const cb = this._cb, m = C.mask;

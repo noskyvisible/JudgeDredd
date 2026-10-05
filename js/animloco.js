@@ -74,6 +74,7 @@ class Foot {
     this.x0 = 0; this.y0 = 0; this.z0 = 0; this.yaw0 = 0; this.p0 = 0;
     this.tx = 0; this.tz = 0; this.tyaw = 0; this.h = 0.1; this.landP = 0;
     this.err = 0; this.cool = 0; this.over = false;
+    this.flex = false;                // set by the leg IK: the planted ankle ran out of dorsiflexion
   }
 }
 
@@ -137,7 +138,7 @@ export class Gait {
   }
 
   lift(f, timed, rate) {
-    f.planted = false; f.timed = timed; f.s = 0; f.rate = rate || 3;
+    f.planted = false; f.timed = timed; f.s = 0; f.rate = rate || 3; f.flex = false;
     f.x0 = f.ax; f.y0 = f.ay; f.z0 = f.az; f.yaw0 = f.yaw; f.p0 = f.pitch;
   }
   land(f) {
@@ -243,6 +244,9 @@ export class Gait {
             // left out of reach (sudden acceleration, a shove, a fast strafe): lift it now; when walking, re-phase the gait around it
             if (o.planted) { this.phase = frac(D - (f.side > 0 ? 0 : 0.5) + 0.001); for (const q of feet) q.phl = frac(this.phase + (q.side > 0 ? 0 : 0.5)); }
             this.lift(f, false); f.phLift = Math.min(0.97, f.phl);
+          } else if (f.flex && f.pitch > 0.05 && phl > D * 0.7 && f.plantT > 0.1 && (o.planted || o.s > 0.75)) {
+            // the ankle can't bend any further late in the stance (long boots, long strides): peel the foot off a little early
+            this.lift(f, false); f.phLift = f.phl;
           }
         } else {
           f.pitch += (0 - f.pitch) * (1 - Math.exp(-10 * dt));
