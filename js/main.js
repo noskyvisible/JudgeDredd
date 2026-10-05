@@ -8,6 +8,7 @@ import { buildStreetProps, updateStreetProps, streetPropStreams } from './street
 import { buildMonorail } from './monorail.js';
 import { buildHallStatues } from './hallstatues.js';
 import { createFlyers } from './flyers.js';
+import { updateDynamicLOD } from './lod.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -198,7 +199,7 @@ function simulate(dt) {
     }
     G.enemies.update(gdt); G.civs.update(gdt); G.traffic.update(gdt); G.pickups.update(gdt); G.crimes.update(gdt); weapons.update(gdt);
   }
-  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt); flyers.update(G.modal ? 0 : dt, player.pos);
+  world.update(G.modal ? 0 : dt, player.pos); updateStreetProps(dt, player.pos); monorail.update(G.modal ? 0 : dt); flyers.update(G.modal ? 0 : dt, player.pos); updateDynamicLOD(dt, camera, player.pos);
   fx.update(dt, gdt);
   const b = G.mode === 'bike' ? bike : null;
   const sp01 = b ? clamp((Math.abs(b.speed) - 40) / 70, 0, 1) : 0;
@@ -220,9 +221,11 @@ function simulate(dt) {
 function renderFrame() {
   renderer.info.reset();
   const mirrored = reflection.render(renderer, scene, camera);
+  const first = renderer.info.render.calls, firstTris = renderer.info.render.triangles;      // mirror pass (+ the shadow map it refreshes)
   if (mirrored) renderer.shadowMap.autoUpdate = false;
   composer.render();
   renderer.shadowMap.autoUpdate = true;
+  G.passInfo = { mirrorShadowCalls: first, mirrorShadowTris: firstTris, totalCalls: renderer.info.render.calls, totalTris: renderer.info.render.triangles };
 }
 // ---------------------------------------------------------------- cinematic title: the camera glides through the Hall plaza while the city lives behind the logo
 const TITLE_SHOTS = [   // all on open road / plaza so the camera never meets a building
@@ -246,7 +249,7 @@ function updateTitle(dt) {
   post.uniforms.uFade.value = Math.max(0, Math.min(fadeIn, fadeOut));
   if (T.t >= S.d) { T.i = (T.i + 1) % TITLE_SHOTS.length; T.t = 0; }
   player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
-  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); flyers.update(dt, camera.position); fx.update(dt, dt);
+  world.update(dt, camera.position); updateStreetProps(dt, camera.position); monorail.update(dt); flyers.update(dt, camera.position); updateDynamicLOD(dt, camera, camera.position); fx.update(dt, dt);
   post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
   const Ut = post.uniforms; Ut.uDof.value = QUALITY[G.quality].ao ? 0.8 : 0; Ut.uFocus.value = camera.position.distanceTo(_tl) * 0.95;
 }
@@ -280,5 +283,5 @@ requestAnimationFrame(frame);
 window.__flyers = flyers; window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
-window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };
+Object.assign(window.__test, { reflection, renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
+window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles, pass: G.passInfo }; };

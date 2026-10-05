@@ -636,13 +636,20 @@ export const world = {
     const sw = new THREE.Mesh(mergeGeometries(swGs), swMat); sw.receiveShadow = true; sw.layers.set(1); scene.add(sw);
     // sidewalk uv: BoxGeometry uv 0..1 per face; repeat set on texture handles tiling
     if (grassGs.length) { const m = new THREE.Mesh(mergeGeometries(grassGs), grassMat); m.receiveShadow = true; scene.add(m); }
-    wallG.forEach((arr, v) => {
-      if (!arr.length) return;
-      const m = new THREE.Mesh(mergeGeometries(arr), facMats[v]); m.castShadow = true; m.receiveShadow = true; scene.add(m);
-    });
+    // The heavy layers (building walls, metal trim: ~1.3 M triangles that also cast shadows) are merged per coarse spatial chunk, so frustum culling and the
+    // shadow / mirror passes (which cull against their own frusta) skip the parts of the city that are far away.  Chunks are coarse on purpose: every chunk
+    // is one more draw call in every pass, and the small layers (neon, shopfronts, signs) cost more in draw calls than they could save in triangles, so they stay whole.
+    const CHUNK = +(globalThis.__CHUNK || 500);
+    const chunked = (geos, material, setup) => {
+      // the outer skyline beyond the city wall would otherwise scatter into dozens of one-tower cells: cell indices are clamped into the city footprint
+      const cells = new Map(), c = new THREE.Vector3(), lo = Math.floor(-HALF / CHUNK), hi = Math.floor(HALF / CHUNK), ix = (v) => Math.max(lo, Math.min(hi, Math.floor(v / CHUNK)));
+      for (const g of geos) { g.computeBoundingBox(); g.boundingBox.getCenter(c); const k = ix(c.x) + ',' + ix(c.z); let a = cells.get(k); if (!a) cells.set(k, a = []); a.push(g); }
+      for (const arr of cells.values()) { const m = new THREE.Mesh(mergeGeometries(arr), material); m.geometry.computeBoundingSphere(); setup?.(m); scene.add(m); }
+    };
+    wallG.forEach((arr, v) => { if (arr.length) chunked(arr, facMats[v], (m) => { m.castShadow = true; m.receiveShadow = true; }); });
     if (neonG.length) scene.add(new THREE.Mesh(mergeGeometries(neonG), neonMat));
     if (shopG.length) scene.add(new THREE.Mesh(mergeGeometries(shopG), shopMat));
-    if (metalG.length) { const m = new THREE.Mesh(mergeGeometries(metalG), new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x2a2d36, roughness: 0.5, metalness: 0.7 })); m.castShadow = true; m.receiveShadow = true; scene.add(m); }
+    if (metalG.length) chunked(metalG, new THREE.MeshStandardMaterial({ vertexColors: true, color: 0x2a2d36, roughness: 0.5, metalness: 0.7 }), (m) => { m.castShadow = true; m.receiveShadow = true; });
     if (signG.length) { const m = new THREE.Mesh(mergeGeometries(signG), signMat); m.renderOrder = 5; scene.add(m); }
 
     // trees

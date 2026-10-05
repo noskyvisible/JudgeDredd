@@ -59,6 +59,7 @@ export const SHOTS = {
   air_docks: { at: [452, 480, 0], cam: { yaw: 0.0, pitch: 0.14, dist: 6.5 }, settle: 50 },
   volley:      { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 6 },
   volley2:     { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.1, dist: 4.6 }, settle: 40, setup: 'volley', flight: 14 },
+  fight6:      { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 120, setup: 'foe6' },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -82,7 +83,7 @@ const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message.split('\n')[0]));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text().slice(0, +process.env.SHOT_ERRLEN || 200)); });
-await page.addInitScript((tm) => { window.__noRender = true; window.__titleMode = tm; }, (opt('shots', '')).startsWith('title'));
+await page.addInitScript(([tm, ch]) => { window.__noRender = true; window.__titleMode = tm; if (ch) globalThis.__CHUNK = ch; }, [(opt('shots', '')).startsWith('title'), +opt('chunk', '0')]);   // --chunk <metres>: override the world's static-geometry chunk size (perf experiments)
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 await page.evaluate(([q, hud]) => {
@@ -109,6 +110,9 @@ for (const name of names) {
     if (sh.cam) { P.camYaw = sh.cam.yaw; P.camPitch = sh.cam.pitch; P.camDist = sh.cam.dist; }
     if (sh.setup === 'foe') {
       for (const [dx, dz, t] of [[3.2, -2.6, 'thug'], [-3.4, -3.8, 'gunman'], [0.6, -6.5, 'brute']]) { const e = new T.Enemy(t, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
+    }
+    if (sh.setup === 'foe6') {   // the worst case: six hostiles in the frame
+      for (const [dx, dz, ty] of [[3.2, 2.6, 'thug'], [-3.4, 3.8, 'gunman'], [0.6, 6.5, 'brute'], [5, 8, 'thug'], [-6, 9, 'gunman'], [2, 12, 'junkie']]) { const e = new T.Enemy(ty, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
     }
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     if (sh.setup === 'ride_stop') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 0; T.bike.sirenOn = true; for (const c of G.traffic.cars) if (Math.hypot(c.pos.x - P.pos.x, c.pos.z - P.pos.z) < 40) c.pos.x += 3000; }
@@ -218,7 +222,7 @@ for (const name of names) {
   }, [sh, evalJs]);
   if (pageShot) await page.screenshot({ path: path.join(out, name + suffix + '.png'), timeout: 120000 });
   else fs.writeFileSync(path.join(out, name + suffix + '.png'), Buffer.from(r.png.split(',')[1], 'base64'));
-  console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k  cam ${r.cam.join(',')}`);
+  console.log(`${name}: ${((Date.now() - t0) / 1000).toFixed(1)}s  draw calls ${r.info.calls}  tris ${(r.info.tris / 1000).toFixed(0)}k  [mirror+shadow ${r.info.pass.mirrorShadowCalls} calls / ${(r.info.pass.mirrorShadowTris / 1000).toFixed(0)}k]  cam ${r.cam.join(',')}`);
 }
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, +process.env.SHOT_ERRN || 8).join('\n') : 'no page errors');
 await browser.close();

@@ -17,6 +17,7 @@ class Car {
     this.model = makeCarModel(this.kind, carPaint(this.kind));
     this.neon = this.kind !== 'police' && chance(0.35) ? new THREE.Color(pick(NEONS)) : null;   // underglow
     this.lightsOn = this.kind === 'police' && chance(0.6);
+    this.model.traverse((o) => { if (o.isMesh) o.castShadow = false; });   // cars are small and dark: their sun shadows are invisible on wet asphalt, and each caster is a draw call in the shadow pass
     G.scene.add(this.model);
     this.steer = 0; this.prevYaw = 0; this.prevSpeed = 0; this.braking = false; this.pitch = 0; this.roll = 0;
     this.path = new PathFollower(); this.path.lane = 5.0 + rand(-0.4, 0.4);
