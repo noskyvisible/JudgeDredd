@@ -42,6 +42,9 @@ export const SHOTS = {
   boom:        { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.18, dist: 7 }, settle: 30, setup: 'boom' },
   plaza:       { at: [0, 100, Math.PI], free: { pos: [4, 24, 66], look: [0, 0, 30], fov: 55 }, settle: 30 },
   banners:     { at: [0, 100, Math.PI], free: { pos: [-6, 5, 54], look: [6, 40, 4], fov: 62 }, settle: 30 },
+  props:       { at: [0, 0, 0], propKind: 'vending', settle: 30 },
+  props2:      { at: [0, 0, 0], propKind: 'hydrant', settle: 30 },
+  props3:      { at: [0, 0, 0], propKind: 'bench', settle: 30 },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -89,6 +92,14 @@ for (const name of names) {
       f.explosion(at.clone().setY(1.2), 2.4); f.shake(0); T.weapons.firePatches.push({ pos: at.clone().add(new THREE.Vector3(4, 0, 2)), r: 3, t: 9, tick: 0, owner: null });
       f.spark(at.clone().setY(1.5), 60, 0xffc060, 18, 0.9); f.muzzle(new THREE.Vector3(P.pos.x - 0.6, 1.5, P.pos.z - 0.8), new THREE.Vector3(0.15, 0, -1), 0xffd070);
       for (let i = 0; i < (sh.boomSteps || 16); i++) window.__step(1);
+    }
+    if (sh.propKind) { // frame the first street-furniture instance of a kind near the origin, from the street side
+      const st = T.streetPropStreams.find((x) => x.list.length && x.list[0].K && Object.keys(x.mesh.geometry.attributes).length && (x.front ? sh.propKind === 'vending' || sh.propKind === 'kiosk' : true));
+      const list = (T.streetPropStreams.find((x) => x.kind === sh.propKind) || st).list;
+      const s = list.slice().sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0];
+      const nx = Math.sin(s.ry), nz = Math.cos(s.ry), c = T.camera;
+      P.pos.set(s.x + nx * 6, 0, s.z + nz * 6); for (let i = 0; i < 10; i++) window.__step(1);
+      c.position.set(s.x + nx * 3.6 + nz * 1.2, 1.5, s.z + nz * 3.6 - nx * 1.2); c.fov = 55; c.updateProjectionMatrix(); c.lookAt(s.x, 0.8, s.z); c.updateMatrixWorld(true);
     }
     if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
       T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);

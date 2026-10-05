@@ -46,7 +46,7 @@ function addBox(b) {
 }
 
 export const world = {
-  N, S, ROAD, HALF, boxes,
+  N, S, ROAD, HALF, boxes, addBox,
   hallPos: new THREE.Vector3(0, 0, 0),
   spawnPos: new THREE.Vector3(0, 0, 40),
   dynamic: [],      // dynamic solids {x,z,r,h,owner}
@@ -1017,7 +1017,7 @@ transformed.x += sin(uTime * 1.3 + position.y * 0.2) * 0.18 * sway;`);
           float len = 0.7 + 0.9 * h1(iSeed + 3.1);
           float width = (0.022 + 0.022 * h1(iSeed + 7.7)) * (1.0 + dist * 0.05);
           vec3 wp = w + side * (position.x * width) - vel * ((position.y + 0.5) * len);
-          vA = (0.62 - 0.2 * h1(iSeed + 1.7)) * (1.0 - smoothstep(26.0, 52.0, dist)) * smoothstep(0.9, 3.5, dist) / (1.0 + dist * 0.012);
+          vA = (0.62 - 0.2 * h1(iSeed + 1.7)) * (1.0 - smoothstep(26.0, 52.0, dist)) * smoothstep(2.2, 8.0, dist) / (1.0 + dist * 0.012);
           gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
         }`,
       fragmentShader: 'varying float vA; varying vec2 vUv; void main(){ float e = 1.0 - pow(abs(vUv.x * 2.0 - 1.0), 1.6); float t = 0.25 + 0.75 * vUv.y; gl_FragColor = vec4(vec3(0.62, 0.74, 1.0) * 1.1, vA * e * t); }',
