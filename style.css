@@ -3,7 +3,15 @@
 html, body { margin: 0; height: 100%; background: #05040a; overflow: hidden; font-family: 'Bahnschrift', 'Arial Narrow', 'Segoe UI', system-ui, sans-serif; color: #fff; }
 canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 .hidden { display: none !important; }
-#boot { position: fixed; inset: 0; display: grid; place-items: center; background: #05040a; font-size: 22px; letter-spacing: .3em; color: var(--gold); z-index: 100; }
+#boot { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 42%, #1a1030 0%, #05040a 70%); color: var(--gold); z-index: 100; }
+.bootbox { text-align: center; }
+.bootcrest { filter: drop-shadow(0 0 18px rgba(255,210,74,.5)); animation: bootpulse 2.4s ease-in-out infinite; }
+.boottitle { font: 900 30px Impact, 'Arial Black', Arial, sans-serif; letter-spacing: .5em; margin: 14px 0 18px .5em; color: #fff; }
+.bootbar { width: 260px; height: 3px; margin: 0 auto 14px; background: rgba(255,210,74,.18); overflow: hidden; }
+.bootbar i { display: block; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, var(--gold), transparent); animation: bootslide 1.3s ease-in-out infinite; }
+.bootmsg { font-size: 11px; letter-spacing: .3em; opacity: .65; }
+@keyframes bootslide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+@keyframes bootpulse { 50% { filter: drop-shadow(0 0 30px rgba(255,210,74,.8)); } }
 #floaters { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 .float { position: absolute; left: 0; top: 0; font: 900 20px Impact, 'Arial Black', sans-serif; color: #fff; text-shadow: 0 0 6px #000, 2px 2px 0 #000; white-space: nowrap; letter-spacing: .05em; }
 .float.crit { color: var(--gold); font-size: 26px; }
