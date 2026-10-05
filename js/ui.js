@@ -214,6 +214,27 @@ export const hud = {
 // ---------------------------------------------------------------------------
 // Judgement screen
 // ---------------------------------------------------------------------------
+// Mugshot: render the perp's face from the direction the face points (so kneeling and prone suspects work), lit by a camera flash,
+// straight into the main canvas at mugshot size, copy it out and restore.  Runs inside simulate(), before the frame's real render.
+function mugshot(perp) {
+  try {
+    const R = G.renderer, S = G.scene, W = 240, H = 300;
+    const head = perp.ch.head; head.updateWorldMatrix(true, false);
+    const hp = new THREE.Vector3().setFromMatrixPosition(head.matrixWorld), q = new THREE.Quaternion(); head.getWorldQuaternion(q);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q), up = new THREE.Vector3(0, 1, 0).applyQuaternion(q), k = perp.ch.style.scale || 0.9;
+    const target = hp.clone().addScaledVector(up, 0.16 * k);
+    const cam = new THREE.PerspectiveCamera(26, W / H, 0.05, 40); cam.layers.enable(1);
+    cam.position.copy(target).addScaledVector(fwd, 1.2 * k); cam.up.copy(up); cam.lookAt(target); cam.updateMatrixWorld(true);
+    fx.flash(cam.position, 0xffffff, 1.1, 0.4, 7);
+    const size = R.getSize(new THREE.Vector2()), pr = R.getPixelRatio();
+    R.setPixelRatio(1); R.setSize(W, H, false);
+    R.render(S, cam);
+    const c = document.createElement('canvas'); c.width = W; c.height = H; c.getContext('2d').drawImage(R.domElement, 0, 0);
+    R.setPixelRatio(pr); R.setSize(size.x, size.y, false);
+    return c.toDataURL('image/jpeg', 0.85);
+  } catch (e) { return null; }
+}
+
 export const judgement = {
   cur: null, sel: -1, locked: false,
   open(perp) {
@@ -233,6 +254,8 @@ export const judgement = {
       <div class="jmath">Guideline = the harshest charge${d.crimes.length > 1 ? ' (+1 for multiple offences)' : ''}. Each factor moves the sentence one step up or down the ladder.</div>
     </div><div class="jright"><div class="jhead">PASS SENTENCE</div><div class="ladder">${ladder}</div>
       <div class="jconfirm"><small>1–8 select · ENTER confirm · ESC step back</small><button id="jbtn" disabled>SENTENCE</button></div></div></div>`;
+    const shot = mugshot(perp);
+    if (shot) box.querySelector('.jleft').insertAdjacentHTML('beforeend', `<div class="mug"><div class="mugframe"><img src="${shot}" alt=""></div><div class="plate"><b>${perp.id}</b><span>${perp.name.toUpperCase()}</span></div></div>`);
     box.querySelectorAll('.sent').forEach((n) => { n.onclick = () => this.select(+n.dataset.i); n.ondblclick = () => { this.select(+n.dataset.i); this.confirm(); }; });
     box.querySelector('#jbtn').onclick = () => this.confirm();
   },
