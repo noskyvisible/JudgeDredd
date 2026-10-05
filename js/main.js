@@ -22,6 +22,7 @@ import { CrimeManager } from './crimes.js';
 import { Player } from './player.js';
 import { Character, STYLES, CLIPS, makeLawgiver, makeBaton, makePistol, makeBat } from './character.js';
 import { Lawmaster, ridePose } from './bike.js';
+import { updateLawmasterVisuals } from './lawmaster.js';
 import { hud, judgement } from './ui.js';
 import { clamp, damp, rand, mulberry32 } from './util.js';
 
@@ -283,5 +284,5 @@ requestAnimationFrame(frame);
 window.__flyers = flyers; window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { reflection, renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
+Object.assign(window.__test, { Lawmaster, updateLawmasterVisuals, reflection, renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS, streetPropStreams, monorail });
 window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles, pass: G.passInfo }; };

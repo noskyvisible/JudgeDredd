@@ -16,10 +16,11 @@ await p.waitForFunction(() => window.__test, null, { timeout: 180000 });
 const res = await p.evaluate(async (shot) => {
   const T = window.__test, G = window.__G, P = T.player, THREE = T.THREE;
   T.startGame(); T.setQuality(2);
-  const at = { street_neon: [452, -498], fight6: [-250, 50], aerial: [-150, 50], hall: [0, 62] }[shot] || [-250, 50];
+  const at = { street_neon: [452, -498], fight6: [-250, 50], aerial: [-150, 50], hall: [0, 62], ride: [-300, 50] }[shot] || [-250, 50];
   P.pos.set(at[0], 0, at[1]); P.camYaw = shot === 'hall' ? Math.PI : 0; P.camPitch = 0.16; P.camDist = 6.5;
   if (shot === 'fight6') for (const [dx, dz, ty] of [[3.2, 2.6, 'thug'], [-3.4, 3.8, 'gunman'], [0.6, 6.5, 'brute'], [5, 8, 'thug'], [-6, 9, 'gunman'], [2, 12, 'junkie']]) { const e = new T.Enemy(ty, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
-  for (let i = 0; i < 150; i++) window.__step(1);
+  if (shot === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, Math.PI / 2); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 50; for (let i = 0; i < 150; i++) { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; window.__step(1); } }
+  for (let i = 0; i < 150 && shot !== 'ride'; i++) window.__step(1);
   const r = T.renderer, sc = T.scene, mirrorCam = T.reflection.cam;
   const stats = { shadow: new Map(), mirror: new Map(), main: new Map() };
   const orig = r.renderBufferDirect;

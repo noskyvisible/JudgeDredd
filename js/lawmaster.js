@@ -1,3 +1,4 @@
+import { skinVehicle } from './charskin.js';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { eagleShape } from './world.js';
@@ -663,6 +664,7 @@ export function makeLawmasterModel(pal = {}) {
     },
     vis: { park: 0, cf: 0, cr: 0, vf: 0, vr: 0, prevSpeed: 0, acc: 0, spinF: 0, spinR: 0, brakeK: 0, boostK: 0, surge: 0, vsurge: 0, t: Math.random() * 10, dist: 0, heat: 0, glowBase: new THREE.Color(P.glow) },
   };
+  skinVehicle(g, { noSkin: pal.noSkin });   // merge the static parts of every sprung / steered / spinning group into one SkinnedMesh per material (js/charskin.js); everything referenced above stays individual
   updateLawmasterVisuals({ model: g, speed: 0, steer: 0, ctrl: { throttle: 0, brake: 0, hold: true }, lean: 0 }, 0);
   // despawned perp bikes are simply removed from the scene: free this instance's GPU buffers then
   // (static materials and canvas textures are shared/cached and stay alive)
