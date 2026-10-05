@@ -214,7 +214,7 @@ const SCRUB = {
 
 const FINAL = {
   uniforms: {
-    tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null }, tAO: { value: null }, uAO: { value: 1 }, uDbg: { value: 0 },
+    tDiffuse: { value: null }, tBloom: { value: null }, tStreak: { value: null }, tAO: { value: null }, uAO: { value: 1 }, uDbg: { value: 0 }, uFade: { value: 1 },
     time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) },
     uBloom: { value: 0.55 }, uStreak: { value: 0.5 }, uExposure: { value: 1.12 },
     aber: { value: 0.0006 }, vig: { value: 0.42 }, grain: { value: 0.025 }, speed: { value: 0 }, sharpen: { value: 0.3 },
@@ -222,7 +222,7 @@ const FINAL = {
     shock: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
   },
   vertexShader: VERT,
-  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO; uniform float uAO, uDbg; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse, tBloom, tStreak, tAO; uniform float uAO, uDbg, uFade; uniform vec2 res; uniform float time, uBloom, uStreak, uExposure, aber, vig, grain, speed, sharpen, sat, contrast, flash, hurt; uniform vec4 shock[4]; varying vec2 vUv;
     float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
     vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -284,7 +284,7 @@ const FINAL = {
       // film grain + triangular dither (kills banding in the dark fog gradients)
       float n1 = hash(vUv * res + time), n2 = hash(vUv * res * 1.37 + time + 17.0);
       g += (n1 - 0.5) * grain + (n1 + n2 - 1.0) / 255.0;
-      gl_FragColor = vec4(clamp(g, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(g, 0.0, 1.0) * uFade, 1.0);
     }`,
 };
 

@@ -3,6 +3,7 @@ import { G } from './state.js';
 import { installHeightFog } from './shaders.js';
 import { reflection } from './reflect.js';
 import { createPost } from './post.js';
+import { eagleShape } from './world.js';
 import { input } from './input.js';
 import { fx } from './fx.js';
 import { audio } from './audio.js';
@@ -114,6 +115,7 @@ G.callBike = () => {
 const titleEl = document.getElementById('title'), startBtn = document.getElementById('startbtn');
 function startGame() {
   audio.init(); G.started = true; G.paused = false; titleEl.classList.add('hidden'); hud.show(true);
+  player.pos.copy(world.spawnPos); post.uniforms.uFade.value = 1; camera.fov = 62; camera.updateProjectionMatrix();
   input.lock();
   G.crimes.dispatch('brawl');
   const tips = [[2500, 'Follow the gold marker to the crime scene — TAB cycles crimes'], [6000, 'Walk to the Lawmaster and press E to mount it'],
@@ -142,6 +144,13 @@ G.onRespawnReady = () => {
 };
 window.addEventListener('keydown', (e) => { if (judgement.key(e)) { e.preventDefault(); } });
 G.voiceOn = true;
+{ // vector eagle crest (same silhouette as the Hall / pauldron) for the title
+  const pts = eagleShape().getPoints(), xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys), W = 140, H = 118;
+  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${(((p.x - x0) / (x1 - x0)) * W).toFixed(1)},${(H - ((p.y - y0) / (y1 - y0)) * H).toFixed(1)}`).join('') + 'Z';
+  const el = document.querySelector('#title .eagle');
+  if (el) el.innerHTML = `<svg viewBox="-4 -4 ${W + 8} ${H + 8}" width="132" height="112"><defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0a8"/><stop offset=".5" stop-color="#e9b02e"/><stop offset="1" stop-color="#9a6410"/></linearGradient></defs><path d="${d}" fill="url(#eg)" stroke="#3a2406" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+}
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -203,9 +212,35 @@ function renderFrame() {
   composer.render();
   renderer.shadowMap.autoUpdate = true;
 }
+// ---------------------------------------------------------------- cinematic title: the camera glides through the Hall plaza while the city lives behind the logo
+const TITLE_SHOTS = [   // all on open road / plaza so the camera never meets a building
+  { a: [-58, 3.5, 57], b: [58, 7, 57], la: [-12, 26, 0], lb: [12, 30, 0], fov: 58, d: 26 },     // glide across the Hall frontage
+  { a: [-8, 2.0, 60], b: [7, 10, 50], la: [0, 17, 12], lb: [0, 40, 6], fov: 46, d: 18 },         // low push in toward the doors, craning up
+  { a: [-57, 2.5, 44], b: [-57, 26, 44], la: [0, 24, 10], lb: [0, 44, 6], fov: 54, d: 22 },      // crane up the plaza edge to reveal the eagle
+];
+const titleState = { i: 0, t: 0 };
+const _ta = new THREE.Vector3(), _tl = new THREE.Vector3();
+const ease = (x) => x * x * (3 - 2 * x);
+function updateTitle(dt) {
+  const T = titleState, S = TITLE_SHOTS[T.i];
+  T.t += dt;
+  const k = Math.min(1, T.t / S.d), e = ease(k);
+  _ta.set(...S.a).lerp(_tl.set(...S.b), e);
+  camera.position.copy(_ta); camera.position.y += Math.sin(G.time * 0.5) * 0.12;
+  _tl.set(...S.la).lerp(_ta.set(...S.lb), e); camera.lookAt(_tl);
+  if (camera.fov !== S.fov) { camera.fov = S.fov; camera.updateProjectionMatrix(); }
+  // dip to black between shots (and fade up at the very start)
+  const fadeIn = Math.min(1, T.t / 1.2), fadeOut = Math.min(1, (S.d - T.t) / 1.0);
+  post.uniforms.uFade.value = Math.max(0, Math.min(fadeIn, fadeOut));
+  if (T.t >= S.d) { T.i = (T.i + 1) % TITLE_SHOTS.length; T.t = 0; }
+  player.pos.set(camera.position.x, 0, camera.position.z);     // keeps lamp lights / culling centred on what the camera sees
+  world.update(dt, camera.position); fx.update(dt, dt);
+  post.uniforms.time.value = G.time % 100; post.uniforms.flash.value = world.lightning || 0;
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  if (!G.started && !window.__noRender) updateTitle(dt);
   simulate(dt);
   if (!window.__noRender) renderFrame();
   input.endFrame();
@@ -223,5 +258,5 @@ requestAnimationFrame(frame);
 window.__G = G; window.__test = { THREE, world, player, bike, hud, fx, weapons, startGame, setPaused, input, Enemy, Character, makeLawgiver, makeBaton };
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) { simulate(dt); input.endFrame(); } };
 // still-frame rig (tools/shots.mjs): render exactly one frame on demand, with the live loop's render skipped via window.__noRender
-Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat });
+Object.assign(window.__test, { renderer, composer, camera, scene, post, bloom: P.bloom, QUALITY, setQuality, STYLES, CLIPS, makePistol, makeBat, updateTitle, titleState, TITLE_SHOTS });
 window.__render = () => { renderFrame(); const i = renderer.info.render; return { calls: i.calls, tris: i.triangles }; };

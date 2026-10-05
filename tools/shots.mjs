@@ -35,6 +35,7 @@ export const SHOTS = {
   window_mid:  { at: [-345, 90, 0], facadeOf: [-350, 90], dist: 22, lookY: 16, fov: 55, settle: 30 },
   facade_far:  { at: [-345, 90, 0], free: { pos: [-343, 6, 140], look: [-372, 24, 70], fov: 60 }, settle: 40 },
   rooftop:     { at: [150, 50, 0], roofOf: { near: [150, 50], range: 140, look: [150, 2, 50], fov: 70 }, settle: 40 },
+  title0:      { title: [0, 12] }, title1: { title: [1, 8] }, title2: { title: [2, 13] },
   closeup:     { at: [-250, 50, 0], free: { pos: [-247.8, 1.55, 53.2], look: [-250, 1.35, 50], fov: 38 }, settle: 90, setup: 'foe' },
   fight:       { at: [-250, 50, 0], cam: { yaw: 0.0, pitch: 0.2, dist: 6.2 }, settle: 150, setup: 'foe' },
   bike:        { at: [-300, 50, Math.PI / 2], cam: { yaw: Math.PI / 2, pitch: 0.18, dist: 7.5 }, settle: 150, setup: 'ride' },
@@ -46,12 +47,13 @@ const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errs = [];
 page.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message.split('\n')[0]));
 page.on('console', (m) => { if (m.type() === 'error') errs.push('CONSOLE ' + m.text().slice(0, +process.env.SHOT_ERRLEN || 200)); });
-await page.addInitScript(() => { window.__noRender = true; });
+await page.addInitScript((tm) => { window.__noRender = true; window.__titleMode = tm; }, (opt('shots', '')).startsWith('title'));
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 await page.evaluate(([q, hud]) => {
   const T = window.__test, G = window.__G;
-  T.startGame(); T.setQuality(q);
+  if (!window.__titleMode) T.startGame();
+  T.setQuality(q);
   G.crimes.spawnT = 1e9; G.crimes.scenes.forEach((s) => (s.timeLeft = 1e9));
   T.player.hp = T.player.maxHp = 1e9;
   if (!hud) { const st = document.createElement('style'); st.textContent = '#hud,#title,#pause{display:none!important}'; document.head.appendChild(st); }
@@ -64,9 +66,11 @@ for (const name of names) {
   const r = await page.evaluate(async ([sh, evalJs]) => {
     const T = window.__test, G = window.__G, P = T.player, THREE = T.THREE;
     // clean slate
+    if (!sh.title) {
     for (const e of G.enemies.all) e.remove(); G.enemies.all.length = 0;
     if (G.mode === 'bike') G.dismount(true);
     P.pos.set(sh.at[0], 0, sh.at[1]); P.yaw = sh.at[2]; P.vel.set(0, 0, 0);
+    }
     if (sh.cam) { P.camYaw = sh.cam.yaw; P.camPitch = sh.cam.pitch; P.camDist = sh.cam.dist; }
     if (sh.setup === 'foe') {
       for (const [dx, dz, t] of [[3.2, -2.6, 'thug'], [-3.4, -3.8, 'gunman'], [0.6, -6.5, 'brute']]) { const e = new T.Enemy(t, new THREE.Vector3(P.pos.x + dx, 0, P.pos.z + dz)); e.aggro = true; G.enemies.add(e); }
@@ -74,6 +78,11 @@ for (const name of names) {
     if (sh.setup === 'ride') { T.bike.place(P.pos.x + 1.8, P.pos.z, sh.at[2]); P.pos.set(T.bike.pos.x - 1.6, 0, T.bike.pos.z); G.mount(); T.bike.speed = 52; }
     // settle: let lights hop, traffic spawn, the camera catch up
     for (let i = 0; i < sh.settle; i++) { if (sh.setup === 'ride') { T.bike.ctrl.throttle = 0.6; T.bike.ctrl.hold = false; } window.__step(1); }
+    if (sh.title) { // the cinematic title camera at a chosen shot / time (the game is not started, so the title overlay shows)
+      T.titleState.i = sh.title[0]; T.titleState.t = sh.title[1]; for (let i = 0; i < 90; i++) T.updateTitle(1 / 60);
+      document.getElementById('title').classList.remove('hidden');
+      const info = window.__render(); return { info, cam: [0, 0, 0], png: T.renderer.domElement.toDataURL('image/png') };
+    }
     const clear = (p, tgt) => { // camera not inside a building and an unobstructed sight line to the target
       for (const b of T.world.boxes) if (p.x > b.minX && p.x < b.maxX && p.z > b.minZ && p.z < b.maxZ && p.y < b.h + 0.5) return false;
       return !T.world.rayBoxes(p, p.clone().lerp(tgt, 0.82));   // the target itself may be inside a building (the Hall): only the approach must be clear
