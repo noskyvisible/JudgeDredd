@@ -5,7 +5,7 @@ import { audio } from './audio.js';
 import { world } from './world.js';
 import { makeEagle } from './world.js';
 import { Character } from './character.js';
-import { makeLawmasterModel, ridePoseIK } from './lawmaster.js';
+import { makeLawmasterModel, ridePoseIK, updateLawmasterVisuals } from './lawmaster.js';
 import { clamp, lerp, damp, angDiff, dampAngle, rand, deg, chance } from './util.js';
 
 const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.8, ...o });
@@ -119,15 +119,14 @@ export class Lawmaster {
   }
 
   sync(dt = 0) {
-    const m = this.model, u = m.userData;
+    const m = this.model;
     m.position.copy(this.pos);
     m.rotation.set(0, this.yaw, 0);
     m.rotation.order = 'YXZ';
     m.rotation.z = this.lean;
-    u.front.rotation.y = -this.steer * 0.45;
     this.wheelRot += this.speed * (dt || 0) / 0.55;
-    u.rearSpin.rotation.x = this.wheelRot; u.frontSpin.rotation.x = this.wheelRot;
-    m.position.y = Math.sin(G.time * 18) * 0.008 * clamp(Math.abs(this.speed) / 40, 0, 1) * 0 + 0;
+    // purely visual: suspension, steering geometry, wheel spin / blur, lights, engine glow, boost flames
+    updateLawmasterVisuals(this, dt);
   }
 
   fx(dt) {
