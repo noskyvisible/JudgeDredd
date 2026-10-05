@@ -88,7 +88,14 @@ bike.place(world.spawnPos.x + 5.5, world.spawnPos.z - 3.5, Math.PI / 2 + 0.35);
 G.bikeObj = bike;
 G.civs.init();
 G.traffic.init(34);
-renderer.compile(scene, camera);   // build every shader program up front so nothing hitches the first time it comes into view
+// build every shader program up front so nothing hitches the first time it comes into view.  renderer.compile() only visits VISIBLE objects, and civilians
+// start hidden / perps do not exist yet, so one throw-away character of every style is parked under the map for the compile (skinned programs differ from rigid ones)
+{
+  const dummies = ['thug', 'gunman', 'brute', 'junkie', 'boss', 'biker', 'civ'].map((s) => new Character(s));
+  for (const d of dummies) { d.root.position.set(0, -80, 0); scene.add(d.root); }
+  renderer.compile(scene, camera);
+  for (const d of dummies) scene.remove(d.root);
+}
 hud.init();
 input.init(canvas);
 G.voiceOn = true;

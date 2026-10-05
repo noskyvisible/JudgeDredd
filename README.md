@@ -89,27 +89,57 @@ Higher-tier scenarios (hostages, bombs, gang wars, snipers, Block Bosses) unlock
 
 | File | What it does |
 |---|---|
-| `js/world.js` | procedural city: roads, megablocks, shopfronts, signs, rain, sky, lightning, flyers, cables, searchlights, Hall of Justice |
+| `js/main.js` | renderer, quality tiers, render loop (mirror pass → shadow → main → post), cinematic title camera, game flow |
+| `js/world.js` | procedural city: roads, megablocks, shopfronts, signs, rain, sky, district atmospheres, lightning, cables, searchlights, Hall of Justice (plaza seal, banners) |
 | `js/facades.js`, `js/textures.js` | canvas-generated PBR building facades (albedo / emissive / roughness-metal / normal), wet asphalt, neon sign atlas |
-| `js/shaders.js` | shader patches: wall wetness, road puddle ripples, height fog, fresnel rim light |
-| `js/holo.js` | flickering holographic adverts above intersections |
-| `js/character.js` | procedural humanoid rig + keyframed animation clips (Dredd, perps, civilians) |
-| `js/charmodel.js` | the character bodies — Dredd's hero kit (red visor, gold eagle/ribbed pauldrons, green gear) and perp types |
-| `js/lawmaster.js`, `js/carmodel.js` | the Lawmaster motorcycle + seated-rider IK; sedans, taxis, coupes and box trucks |
-| `js/player.js` | Dredd controller: free-flow combat, counters, dodge, Lawgiver, camera, ranks |
-| `js/bike.js` | Lawmaster physics, boost/drift, autopilot, hostile bikers |
-| `js/weapons.js` | the six Lawgiver ammo types, projectiles, explosions, fire |
+| `js/shaders.js` | shader patches: height fog, wet walls, **interior-mapped lit windows**, road puddle ripples + **planar-reflection sampling**, fresnel rim light |
+| `js/reflect.js` | planar ground reflections: the scene rendered again from a camera mirrored in the road plane |
+| `js/post.js` | post stack: dual-filter bloom pyramid, anamorphic streaks, SSAO from depth, depth of field, filmic tone map, grade, grain |
+| `js/streetprops.js`, `js/monorail.js`, `js/flyers.js`, `js/hallstatues.js` | street furniture, elevated monorail with lit trains, flying traffic, the gold Judge statues (the real hero model, cast in gold) |
+| `js/character.js` | procedural humanoid rig (hips > torso > chest > neck > head, shoulder/elbow/wrist, hip/knee/ankle) |
+| `js/animcore.js`, `js/animloco.js`, `js/animclips.js` | animation: IK locomotion with planted feet, secondary-motion springs, impulses and look-at, spline-interpolated clip library with directional variants |
+| `js/charhero*.js`, `js/props.js` | Dredd: lofted anatomy, conformed armour, clear-coat suit, eagle and ribbed pauldrons; Lawgiver Mk II and daystick |
+| `js/chargeneric*.js`, `js/propsperp.js`, `js/charkit.js` | perps and civilians: 43 looks, painted faces, shared texture sheets, per-instance seeded variation; weapons |
+| `js/charskin.js` | **skinning**: merges a rig's static meshes into one SkinnedMesh per material (identity bind, pixel-equivalent) — characters and the Lawmaster |
+| `js/lawmaster.js`, `js/carmodel.js`, `js/vehicle_*.js`, `js/bike.js`, `js/traffic.js` | the Lawmaster (sprung / steered / spinning rig, rider IK), eight car types, bike physics, traffic |
+| `js/lod.js` | distance management for dynamic entities (far cars hidden, enemy shadow casting by distance) |
+| `js/player.js` | Dredd controller: free-flow combat, counters, dodge, Lawgiver, camera, ranks and perks |
+| `js/weapons.js` | the six Lawgiver ammo types, velocity-aligned projectile billboards, explosions, fire |
 | `js/enemies.js` | perp AI (token-based surround, telegraphs, surrender), manager |
-| `js/crimes.js` | dispatch, scenarios, bombs, hostages, chases, wagon, sentencing rules |
-| `js/ui.js` | HUD, minimap, map, judgement screen |
-| `js/fx.js` | fire/smoke/glow particles, streak sparks, electric arcs, lightning, bullet-hole & scorch decals, explosions, shockwaves, shake, hit-stop |
-| `js/audio.js` | procedural SFX, engine, siren, rain and synth soundtrack |
-| `js/civs.js`, `js/traffic.js`, `js/pickups.js` | citizens, road traffic, ammo & health pickups |
+| `js/crimes.js` | dispatch, scenarios, backup waves, bombs, hostages, chases, wagon, sentencing rules |
+| `js/ui.js` | HUD, minimap, map, judgement screen with mugshots |
+| `js/fx.js` | fire/smoke/glow particles, streak sparks, electric arcs, lightning, decals, explosions, shockwaves, shake, hit-stop |
+| `js/audio.js` | procedural SFX, engine, siren, rain, monorail rumble and synth soundtrack |
+| `js/civs.js`, `js/pickups.js` | citizens, ammo and health pickups |
 
 ## Graphics
 
-Rendered with a physically-based pipeline: PMREM image-based lighting from an imaginary lit skyline, shadowed sun,
-dynamic point lights that hop between the lamps and neon nearest to you, height fog, wet roads with animated puddle ripples
-and reflection smears, volumetric lamp / headlight cones, searchlights and holograms. Post-processing: gentle bloom, colour grade,
-sharpen, speed blur, shock-wave distortion and chromatic aberration. `O` cycles quality (LOW / MEDIUM / HIGH) and the game
-auto-lowers it if the frame rate collapses; `F3` shows an FPS counter.
+A physically-based pipeline in linear HDR: PMREM image-based lighting from an imaginary lit skyline, shadowed sun, dynamic point lights that hop between
+the lamps and neon nearest to you, height fog, and **planar reflections on the wet roads** (neon, windows, lamps, the Hall and the sky mirror in the
+asphalt, blurred by roughness). Lit windows are **interior-mapped rooms** with parallax. Each of the nine districts has its own sky, fog and grade, blended
+as you cross the city. Post-processing: soft multi-scale bloom with anamorphic streaks, ambient occlusion, depth of field on cinematic moments, a filmic tone
+map that keeps neon saturated, grade, speed blur, shock-wave distortion and chromatic aberration. `O` cycles quality (LOW / MEDIUM / HIGH): LOW drops
+reflections, shadows and bloom; MEDIUM drops the streaks and halves the AO. The game auto-lowers it if the frame rate collapses, and caps the internal
+resolution per tier so a 4K window does not push 8 M pixels through the heavy passes. `F3` shows an FPS counter.
+
+## Performance notes
+
+The expensive part of a browser frame is draw calls, and a character or vehicle is drawn up to three times (sun shadow map, mirrored ground pass, main pass).
+Everything that moves is therefore **skinned**: each rig's static meshes are merged into one `SkinnedMesh` per material, driven by the rig's own joint groups
+(`js/charskin.js`). Dredd drops from 73 draw calls per pass to 12, a perp from ~25 to 3-5, the Lawmaster from ~70 to ~25. Far traffic is hidden (fog already hides it),
+enemies only cast shadows when close, and the mirror pass only draws nearby dynamic entities. Typical frame (HIGH, all three passes): ~330-570 draw calls, 2.4-2.7 M triangles;
+the same scenes were 900-1200 draw calls before. `?noskin` on the page URL turns skinning off for A/B comparisons.
+
+## Developer tools (`tools/`)
+
+All of them drive headless Chromium (software GL is fine) against a static server (`python3 -m http.server 8000`) and need Playwright.
+
+| Tool | Use |
+|---|---|
+| `shots.mjs` | still frames at named vantage points (`--shots hall,street_neon,fight6,bike,title0 --size 1280x720 --hud --page`); `--eval` runs JS in the page, `--chunk` / `--quality` for experiments |
+| `studio.mjs` | character contact sheets: turntables, clip strips (`--pose frames:slashR:8`), walk cycles (`--cycle walk:3.2:8`); `--seed` fixes a perp's look |
+| `perpstudio.mjs`, `vstudio.mjs` | one perp look / the vehicles under studio lighting |
+| `anim-check.mjs` | numeric animation checks: foot slide, sole contact, knee limits, NaNs, update cost |
+| `passprofile.mjs`, `drawprofile.mjs` | draw calls and triangles attributed per pass (shadow / mirror / main) and per object kind |
+| `soak.mjs`, `ridesoak.mjs`, `bot.mjs` | 9,000 frames of random input over every scenario; a ride soak; a bot that plays fight → judge → wagon |
+| `build-single.mjs`, `make-artifact.mjs` | bundle the whole game into one self-contained HTML file / a page body for publishing |
