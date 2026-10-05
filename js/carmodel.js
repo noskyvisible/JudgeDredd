@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeCanvas, canvasTex, mulberry32 } from './util.js';
 import { V3, lin, se, smoothstep, mix, surface, patch, capRing, ringAt, M4, xf, rod, pipe, lathe, warp, tint, patchGlass, cbox, Kit } from './vehicle_geo.js';
@@ -76,8 +75,8 @@ function buildAtlas() {
     x.fillStyle = '#7a5a10'; x.font = F('700', 30); x.fillText('MC-1  PATROL  •  SECTOR 9', 256, y0 + 112); cell('police', 0, y0, 512, 160); }
   // bus route sign (512 x 64) at (512, 200): glowing amber dot-matrix
   { const x0 = 512, y0 = 200; x.fillStyle = '#120a02'; x.fillRect(x0, y0, 512, 64); ex.fillStyle = '#000'; ex.fillRect(x0, y0, 512, 64);
-    ex.fillStyle = '#ffae2a'; ex.font = F('900', 40); ex.textAlign = 'center'; ex.textBaseline = 'middle'; ex.fillText('42  SECTOR 9 • HALL OF JUSTICE', x0 + 256, y0 + 33);
-    x.fillStyle = '#ffae2a'; x.font = F('900', 40); x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('42  SECTOR 9 • HALL OF JUSTICE', x0 + 256, y0 + 33);
+    const route = '42 \u25C6 HALL OF JUSTICE';
+    for (const ctx of [ex, x]) { ctx.save(); ctx.fillStyle = '#ffae2a'; ctx.font = F('900', 40); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const k = Math.min(1, 480 / ctx.measureText(route).width); ctx.translate(x0 + 256, y0 + 33); ctx.scale(k, 1); ctx.fillText(route, 0, 0); ctx.restore(); }
     for (let i = 0; i < 512; i += 4) { ex.fillStyle = 'rgba(0,0,0,0.5)'; ex.fillRect(x0 + i, y0, 1, 64); } cell('route', x0, y0, 512, 64); }
   // bus livery band (512 x 96) at (512, 280)
   { const x0 = 512, y0 = 280; x.fillStyle = '#1b3f9a'; x.fillRect(x0, y0, 512, 96); x.fillStyle = '#f0c020'; x.fillRect(x0, y0 + 60, 512, 14); x.fillStyle = '#e8e8ee'; x.font = F('900', 40); x.textAlign = 'left'; x.textBaseline = 'middle'; x.fillText('MC-1 TRANSIT', x0 + 18, y0 + 32); cell('busband', x0, y0, 512, 96); }
@@ -290,9 +289,9 @@ function buildCarType(kind) {
   const fz = zEnd + 0.004, yN = S.nose, yBm = S.base + 0.18;
   const nw = halfW(zEnd) * 0.92;
   {
-    const gW = S.van ? nw * 1.2 : nw * 0.9, gH = S.van ? 0.2 : 0.13, gY = (yN + yBm) / 2 + (S.van ? 0.02 : -0.03);
-    const gr = new THREE.PlaneGeometry(gW, gH); uvCell(gr, 'grille'); kit.add(xf(gr, 0, gY, fz + 0.002), M.decal, host);
-    kit.add(tint3(xf(rb(gW + 0.04, gH + 0.04, 0.03, 0.015), 0, gY, fz - 0.01), kind === 'police' ? C.black : C.chrome), M.trim, host);
+    const gW = S.van ? nw * 1.25 : nw * 1.05, gH = S.van ? 0.2 : 0.15, gY = (yN + yBm) / 2 + (S.van ? 0.03 : 0.0);
+    const gr = new THREE.PlaneGeometry(gW, gH); uvCell(gr, 'grille'); kit.add(xf(gr, 0, gY, fz + 0.012), M.decal, host);
+    kit.add(tint3(xf(rb(gW + 0.05, gH + 0.05, 0.03, 0.015), 0, gY, fz - 0.006), kind === 'police' ? C.black : [0.55, 0.57, 0.6]), M.trim, host);   // surround sits behind the mesh
     for (const s of [-1, 1]) {   // headlamps: bright core + DRL eyebrow + amber corner
       const hx = s * (nw - 0.24), hy = yN - 0.07;
       kit.add(tint3(xf(rb(0.34, 0.085, 0.03, 0.02), hx, hy, fz), C.black), M.trim, host);
@@ -302,8 +301,9 @@ function buildCarType(kind) {
       kit.add(tint3(xf(bx(0.14, 0.05, 0.02), s * (nw - 0.22), yBm + 0.02, fz), C.dark), M.trim, host);   // fog intake
     }
     kit.add(tint3(xf(rb(nw * 2.02, 0.09, 0.07, 0.03), 0, yBm - 0.04, fz + 0.01), kind === 'police' ? C.black : C.grey), M.trim, host);   // bumper strip
-    const pl = new THREE.PlaneGeometry(0.42, 0.13); M.platesFront = pl; kit.add(xf(pl, 0, yBm + 0.06, fz + 0.035), M.decal, host);
+    const pl = new THREE.PlaneGeometry(0.42, 0.13); M.platesFront = pl; kit.add(xf(pl, 0, yBm - 0.04, fz + 0.05), M.decal, host);
   }
+  M.lampPts = { head: [nw - 0.3, yN - 0.07, zEnd + 0.03], tail: [halfW(-zEnd) * 0.92 - 0.22, S.tail - 0.09, -zEnd - 0.03] };
   // ---- tail: lamps (tail material), third brake light, plate, bumper ----
   const rz = -zEnd - 0.004, yT = S.tail;
   {
@@ -362,9 +362,10 @@ function buildTruck() {
   cab.computeVertexNormals();
   kit.add(xf(cab, 0, (cy0 + cy1) / 2, (cz0 + cz1) / 2), M.paint, host);
   // windscreen (raked plane over the upper front) + door glass
-  { const ws = new THREE.PlaneGeometry(cW - 0.36, 0.85); ws.rotateX(-Math.atan2(0.22, 0.99)); kit.add(xf(ws, 0, 2.2, cz1 - 0.12 + 0.015), M.glass, host);
+  { const ws = new THREE.PlaneGeometry(cW - 0.36, 0.85); ws.rotateX(-Math.atan2(0.205, 0.85)); kit.add(xf(ws, 0, 2.2, cz1 - 0.1025 + 0.035), M.glass, host);   // follows the raked upper face, just proud of it
+    const wb = new THREE.PlaneGeometry(cW - 0.38, 0.83); wb.rotateX(-Math.atan2(0.205, 0.85)); kit.add(tint3(xf(wb, 0, 2.2, cz1 - 0.1025 + 0.025), C.seat), M.trim, host);   // dark cab interior behind the glass
     kit.add(tint3(xf(bx(cW - 0.3, 0.06, 0.06), 0, 1.75, cz1 - 0.01), C.black), M.trim, host); }
-  for (const s of [-1, 1]) { const dw = new THREE.PlaneGeometry(0.95, 0.72); dw.rotateY(s * Math.PI / 2); kit.add(xf(dw, s * (cW / 2 + 0.004), 2.15, cz1 - 0.75), M.glass, host); kit.add(tint3(xf(bx(0.02, 0.9, 0.035), s * (cW / 2 + 0.005), 1.85, cz1 - 1.28), C.black), M.trim, host); }
+  for (const s of [-1, 1]) { const dw = new THREE.PlaneGeometry(0.95, 0.72); dw.rotateY(s * Math.PI / 2); kit.add(xf(dw, s * (cW / 2 + 0.008), 2.15, cz1 - 0.75), M.glass, host); const db = new THREE.PlaneGeometry(0.93, 0.7); db.rotateY(s * Math.PI / 2); kit.add(tint3(xf(db, s * (cW / 2 + 0.003), 2.15, cz1 - 0.75), C.seat), M.trim, host); kit.add(tint3(xf(bx(0.02, 0.9, 0.035), s * (cW / 2 + 0.005), 1.85, cz1 - 1.28), C.black), M.trim, host); }
   for (const s of [-1, 1]) {   // front fenders (black quarter shells over the steer wheels) + cab step
     const fen = new THREE.CylinderGeometry(S.R + 0.1, S.R + 0.1, S.TW + 0.16, 8, 1, true, -0.15, Math.PI * 0.62); fen.rotateZ(Math.PI / 2); fen.rotateX(-Math.PI / 2 + 0.3);
     kit.add(tint3(xf(fen, s * (S.W / 2 - S.TW / 2 - 0.02), S.R, S.ax[0]), C.black), M.trim, host);
@@ -375,7 +376,7 @@ function buildTruck() {
   kit.add(tint3(xf(bx(1.9, 0.5, 0.9), 0, 1.95, 2.3), C.seat), M.trim, host);
   // grille, lamps, bumper, plate
   const fz = L2 + 0.005;
-  { const gr = new THREE.PlaneGeometry(1.3, 0.42); uvCell(gr, 'grille'); kit.add(xf(gr, 0, 1.38, fz), M.decal, host); kit.add(tint3(xf(rb(1.36, 0.48, 0.03, 0.02), 0, 1.38, fz - 0.012), C.chrome), M.trim, host); }
+  { const gr = new THREE.PlaneGeometry(1.3, 0.42); uvCell(gr, 'grille'); kit.add(xf(gr, 0, 1.38, fz + 0.012), M.decal, host); kit.add(tint3(xf(rb(1.38, 0.5, 0.03, 0.02), 0, 1.38, fz - 0.008), [0.55, 0.57, 0.6]), M.trim, host); }
   for (const s of [-1, 1]) { kit.add(tint3(xf(bx(0.3, 0.16, 0.03), s * 0.85, 1.08, fz), LAMP.head), M.lamp, host); kit.add(tint3(xf(bx(0.1, 0.1, 0.03), s * 1.05, 1.08, fz), LAMP.amber), M.lamp, host); }
   kit.add(tint3(xf(rb(2.36, 0.3, 0.2, 0.05), 0, 0.82, fz), C.dark), M.trim, host);
   { const pl = new THREE.PlaneGeometry(0.46, 0.14); M.platesFront = pl; kit.add(xf(pl, 0, 0.84, fz + 0.105), M.decal, host); }
@@ -395,6 +396,7 @@ function buildTruck() {
   kit.add(xf(bx(1.2, 0.05, 0.03), 0, 3.45, bz0 - 0.015), M.tail, host);
   kit.add(tint3(xf(rb(2.2, 0.16, 0.12, 0.03), 0, 0.72, bz0 - 0.04), C.dark), M.trim, host);
   { const pl = new THREE.PlaneGeometry(0.46, 0.14); pl.rotateY(Math.PI); M.platesRear = pl; kit.add(xf(pl, 0, 0.9, bz0 - 0.03), M.decal, host); }
+  M.lampPts = { head: [0.85, 1.08, L2 + 0.02], tail: [0.85, 1.12, bz0 - 0.04] };
   return finish('truck', S, kit, host, M, {});
 }
 function buildBus() {
@@ -420,12 +422,16 @@ function buildBus() {
   const vSideLo = 0.236, vSideHi = 0.283;
   for (const s of [-1, 1]) {
     const a = s < 0 ? vSideLo : 1 - vSideHi, b = s < 0 ? vSideHi : 1 - vSideLo;
-    kit.add(patch(busFn, -L2 * 0.9, L2 * 0.84, a, b, 10, 3, { offset: 0.008 }), M.glass, host);
+    kit.add(patch(busFn, -L2 * 0.9, L2 * 0.95, a, b, 10, 3, { offset: 0.01 }), M.glass, host);
+    kit.add(tint3(patch(busFn, -L2 * 0.9, L2 * 0.95, a, b, 10, 2, { offset: 0.005 }), C.seat), M.trim, host);     // dark cabin behind the glass
     for (let i = 0; i < 6; i++) { const z = -L2 * 0.78 + i * 1.08; kit.add(patch(busFn, z - 0.06, z + 0.06, a - 0.005, b + 0.005, 1, 3, { offset: 0.012 }), M.paint, host); }
     kit.add(uvCell(patch(busFn, s > 0 ? L2 * 0.82 : -L2 * 0.92, s > 0 ? -L2 * 0.92 : L2 * 0.82, s < 0 ? 0.15 : 0.85, s < 0 ? 0.205 : 0.795, 12, 2, { offset: 0.006, swapUV: true }), 'busband'), M.decal, host);
   }
-  kit.add(patch(busFn, L2 * 0.9, L2 * 0.99, 0.22, 0.78, 3, 14, { offset: 0.01 }), M.glass, host);   // wrap windscreen
-  kit.add(patch(busFn, -L2 * 0.99, -L2 * 0.9, 0.3, 0.7, 2, 6, { offset: 0.01 }), M.glass, host);
+  { const ws = new THREE.PlaneGeometry(1.95, 1.25); kit.add(xf(ws, 0, 1.95, L2 * 0.99 + 0.014), M.glass, host);                         // windscreen on the front face
+    kit.add(tint3(xf(new THREE.PlaneGeometry(1.93, 1.23), 0, 1.95, L2 * 0.99 + 0.006), C.seat), M.trim, host);
+    { const rb2 = new THREE.PlaneGeometry(1.58, 0.78); rb2.rotateY(Math.PI); kit.add(tint3(xf(rb2, 0, 2.2, -L2 * 0.99 - 0.004), C.seat), M.trim, host); }
+    kit.add(tint3(xf(bx(2.0, 0.08, 0.04), 0, 1.3, L2 * 0.99 + 0.012), C.black), M.trim, host);
+    const rw = new THREE.PlaneGeometry(1.6, 0.8); rw.rotateY(Math.PI); kit.add(xf(rw, 0, 2.2, -L2 * 0.99 - 0.012), M.glass, host); }
   kit.add(tint3(xf(bx(2.1, 0.06, 6.0), 0, 1.0, 0), C.seat), M.trim, host);
   for (let i = 0; i < 5; i++) for (const s of [-1, 1]) kit.add(tint3(xf(bx(0.8, 0.5, 0.2), s * 0.55, 1.3, -2.2 + i * 1.0), C.seat), M.trim, host);
   // route sign (glowing), lamps, bumpers, plates
@@ -441,6 +447,7 @@ function buildBus() {
   { const pl = new THREE.PlaneGeometry(0.46, 0.14); pl.rotateY(Math.PI); M.platesRear = pl; kit.add(xf(pl, 0, 0.75, rz - 0.01), M.decal, host); }
   for (const s of [-1, 1]) { kit.add(tint3(rod(V3(s * 1.1, 2.4, L2 * 0.9), V3(s * 1.32, 2.5, L2 * 0.88), 0.02, 6), C.black), M.trim, host); kit.add(tint3(xf(rb(0.06, 0.36, 0.2, 0.03), s * 1.34, 2.36, L2 * 0.88), C.black), M.trim, host); }
   kit.add(tint3(xf(rb(1.6, 0.18, 1.6, 0.05), 0, 3.1, -1.6), C.grey), M.trim, host);   // roof HVAC pod
+  M.lampPts = { head: [0.8, 0.82, L2 * 0.99 + 0.02], tail: [0.95, 1.0, -L2 * 0.99 - 0.02] };
   return finish('bus', S, kit, host, M, {});
 }
 
@@ -453,7 +460,7 @@ function finish(kind, S, kit, host, M, fns) {
   const merged = {};
   for (const [k, arr] of geos) { merged[k] = mergeGeometries(arr, false); merged[k].computeBoundingSphere(); }
   // licence plate quads are cloned per car (their UVs pick a plate), so remember where they sit inside the decal geometry
-  const T = { kind, S, geo: merged, platesFront: M.platesFront, platesRear: M.platesRear, brandSides: M.brandSides, fns, height: kind === 'bus' ? 3.1 : kind === 'truck' ? 3.5 : (S.roof || 1.5) };
+  const T = { kind, S, geo: merged, platesFront: M.platesFront, platesRear: M.platesRear, brandSides: M.brandSides, fns, height: kind === 'bus' ? 3.1 : kind === 'truck' ? 3.5 : (S.roof || 1.5), lamps: M.lampPts };
   return T;
 }
 function typeData(kind) {
@@ -522,7 +529,7 @@ export function makeCarModel(kind, color, neon = null) {
     }
   });
   const nc = new THREE.Color(neon ?? 0x2060ff);
-  root.userData = { len: S.L, wid: S.W, kind, big: !!S.big, height: T.height, paint, tail, wheels, front, wheelR: S.R, chassis, lampMesh, tailMesh, neon: nc, lightbar };
+  root.userData = { len: S.L, wid: S.W, kind, big: !!S.big, height: T.height, paint, tail, wheels, front, wheelR: S.R, chassis, lampMesh, tailMesh, neon: nc, lightbar, lamps: T.lamps };
   return root;
 }
 

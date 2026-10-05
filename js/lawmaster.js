@@ -6,6 +6,7 @@ import { makeCanvas, canvasTex, clamp, damp } from './util.js';
 import { patchRim } from './shaders.js';
 import { V3, lin, cosSpace, se, smoothstep, mix, surface, patch, capRing, ringAt, M4, xf, rod, pipe, lathe, coil, slab, warp, patchGlass, Kit } from './vehicle_geo.js';
 import * as TX from './vehicle_tex.js';
+import { WetStreaks } from './vehicle_fx.js';
 
 // ===========================================================================
 // THE LAWMASTER — hero pursuit cruiser of the Justice Department.
@@ -624,6 +625,7 @@ export function makeLawmasterModel(pal = {}) {
   const pool = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 4.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.glowTex(), color: new THREE.Color(P.glow).multiplyScalar(0.5), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }));
   pool.position.set(0, 0.03, -0.05); pool.renderOrder = 4; g.add(pool);
   const trails = makeTrails(); g.add(trails.mesh);
+  const streaks = new WetStreaks(g, 3);
   const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 4.3).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: TX.shadowTex(), color: 0x000000, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   shadow.position.set(0, 0.02, -0.05); shadow.renderOrder = 3; g.add(shadow);
 
@@ -632,7 +634,7 @@ export function makeLawmasterModel(pal = {}) {
     rear, front, rearSpin, frontSpin, wr: rearSpin, wf: frontSpin, spot, siren,
     sirenL: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenL), sirenR: new THREE.Mesh(new THREE.BufferGeometry(), mats.sirenR),   // bike.js flashes .material.color
     exhaust: [V3(-0.41, 0.53, -2.1), V3(0.41, 0.53, -2.1)],
-    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow, trails, tailY, roadPool,
+    mats, roll, sprung, inner, rake, forkLow, fw, swing, springF, shocks, flares, flames, flameMat, beam, pool, shadow, trails, tailY, roadPool, streaks,
     anchors: {
       seat: V3(0, 1.19, -0.58),
       pegL: pegs[0].clone(), pegR: pegs[1].clone(),
@@ -744,7 +746,19 @@ export function updateLawmasterVisuals(bike, dt) {
   u.pool.rotation.z = -(bike.model.rotation.z || 0); u.shadow.rotation.z = u.pool.rotation.z; u.shadow.visible = !bike.crashed; u.pool.material.opacity = live ? 0.55 + 0.25 * pulse * (on ? 1 : 0.3) : 0;
   u.exhaust[0].set(-0.41, 0.53 - V.cr * 0.6, -2.1); u.exhaust[1].set(0.41, 0.53 - V.cr * 0.6, -2.1);
   updateTrails(bike, u, dt, live ? smoothstep(22, 45, asp) * (0.55 + 0.45 * V.brakeK) : 0);
+  // wet-road reflections of the tail light (seen from the chase camera) and the headlamp (seen from ahead)
+  const W = u.streaks;
+  if (W && G.camera) {
+    W.begin();
+    if (live) {
+      const cam = G.camera.position;   // _tm / _ti were refreshed by updateTrails for this frame
+      _sp.set(0, u.tailY - 0.05, TZ0 - 0.05).applyMatrix4(_tm); W.add(_sp, cam, 1.7, 0.09, 0.05, 0.42 + 0.5 * V.brakeK, 0.38, 3.0, _ti);
+      if (on) { _sp.set(0, LAMP.y, Z1 + 0.05).applyMatrix4(_tm); W.add(_sp, cam, 1.5, 1.42, 1.25, 0.55, 1.0, 4.0, _ti); }
+    }
+    W.end();
+  }
 }
+const _sp = new THREE.Vector3();
 
 // tail-light streaks: world-space history of the two tail-bar ends, written camera-facing in model space
 const _tq = new THREE.Quaternion(), _te = new THREE.Euler(), _tm = new THREE.Matrix4(), _ti = new THREE.Matrix4(), _tp = new THREE.Vector3(), _ts = new THREE.Vector3(1, 1, 1);
@@ -799,6 +813,7 @@ function planarIK(a, b, tx, ty, tz, bendUp = false) {
 }
 
 const _t = new THREE.Vector3(), _s = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _f = new THREE.Vector3(), _ax = new THREE.Vector3();
+const GRIP_OFF = V3(0, -0.105, 0.01), BALL_OFF = V3(0, -0.075, 0.13), _QH = new THREE.Quaternion(), _QI = new THREE.Quaternion();
 const _MB = new THREE.Matrix4(), _Q = new THREE.Quaternion(), _Qa = new THREE.Quaternion(), _Qb = new THREE.Quaternion(), _Qc = new THREE.Quaternion(), _M = new THREE.Matrix4(), _E = new THREE.Euler();
 function eulerInto(q, order, out) { _E.setFromQuaternion(q, order); out[0] = _E.x; out[1] = _E.y; out[2] = _E.z; }
 // swivelled shoulder/hip rotation: planar (psi, phi) then a twist of `sw` about the limb axis `ax`
@@ -826,7 +841,7 @@ export function ridePoseIK(ch, bike) {
     B.pos[0] = 0; B.pos[1] = 0; B.pos[2] = 0;
     B.hips[0] = -0.05 + st.tuck * 0.12; B.hips[1] = 0; B.hips[2] = 0;
     // torso: upright-ish cruise, tucked on boost, sits up under braking, surges with inertia, leans into turns
-    B.torso[0] = 0.16 + st.tuck * 0.55 - st.up * 0.12 + surge * 1.2 + clamp(sp / 80, 0, 1) * 0.08;
+    B.torso[0] = 0.24 + st.tuck * 0.5 - st.up * 0.14 + surge * 1.2 + clamp(sp / 80, 0, 1) * 0.1;
     B.torso[1] = steer * 0.12;
     B.torso[2] = -lean * 0.25 - steer * 0.04;
     // head: eyes level against the lean, look into the turn / around when idle, up over the screen when tucked
@@ -838,7 +853,7 @@ export function ridePoseIK(ch, bike) {
 
     // ---------------- arms (chest space) ----------------
     const a1 = Math.abs(ch.elL.position.y) || 0.38, a2 = Math.abs(ch.wrL.position.y) || 0.38;
-    const gOff = ch.gripOffset || V3(0, -0.105, 0.01);       // grip centre in hand space
+    const gOff = ch.gripOffset || GRIP_OFF;                   // grip centre in hand space (a rig may override it)
     _M.copy(ch.chest.matrixWorld).invert();
     const arm = (L) => {
       const sh = L ? ch.shL : ch.shR, wr = L ? ch.wrL : ch.wrR;
@@ -873,8 +888,7 @@ export function ridePoseIK(ch, bike) {
 
     // ---------------- legs (hips space) ----------------
     const l1 = Math.abs(ch.knL.position.y) || 0.46, l2 = Math.abs(ch.anL.position.y) || 0.4;
-    ch.hips.getWorldQuaternion(_Qa); const hipsInv = _Qa.clone().invert();
-    u.inner.getWorldQuaternion(_Qb); const innerQ = _Qb.clone();
+    const hipsInv = ch.hips.getWorldQuaternion(_QH).invert(), innerQ = u.inner.getWorldQuaternion(_QI);
     const leg = (L) => {
       const hp = L ? ch.hipL : ch.hipR, an = L ? ch.anL : ch.anR, out = L ? 1 : -1;
       // foot frame in bike space: toes forward + a little out, sole level with the toe dipped slightly
@@ -882,7 +896,7 @@ export function ridePoseIK(ch, bike) {
       qFoot.setFromRotationMatrix(_MB.makeBasis(_x, _y, _z)).premultiply(innerQ).premultiply(hipsInv);
       // the ball of the foot rests on top of the peg
       _t.copy(L ? A.pegL : A.pegR); _t.y += 0.034; u.inner.localToWorld(_t); ch.hips.worldToLocal(_t);
-      _w.copy(_s.set(0, -0.075, 0.13).applyQuaternion(qFoot)); _w.subVectors(_t, _w).sub(hp.position);
+      _w.copy(BALL_OFF).applyQuaternion(qFoot); _w.subVectors(_t, _w).sub(hp.position);
       const r = planarIK(l1, l2, _w.x, _w.y, _w.z, true);
       _ax.copy(_w).normalize();
       limbQuat(r, _ax, -out * 0.16, qThigh);
