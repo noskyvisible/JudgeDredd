@@ -143,6 +143,7 @@ export class Character {
     this._dispRoll = 0; this._pivY = 0.9; this._cY = 0.9; this._lift = 0;
     this._seed = Math.random() * 10;
     this._fo = new Float64Array(6);   // foot spots (x, z, yaw) captured when the current clip started
+    this._sleep = false;              // settled on the floor: pose frozen until something happens
   }
   get phase() { return this.gait.phase; }
   set phase(v) { this.gait.phase = v; }
@@ -179,7 +180,7 @@ export class Character {
   play(name, { speed = 1, hold = false, dir = null } = {}) {
     const c = pickClip(name, dir, this); if (!c) return;
     this.clip = c; this.clipName = name; this.clipT = 0; this.clipSpeed = speed > 0 ? speed : 1; this.hitFired = false; this.clipHold = !!c.hold;
-    this.clipW = 0; this.clipDone = false; this._linger = null; this._fid = null; this._impact = false;
+    this.clipW = 0; this.clipDone = false; this._linger = null; this._fid = null; this._impact = false; this._sleep = false;
     // clip foot targets are offsets from where the feet are now (unless the clip places them absolutely); out of a run the feet
     // can be anywhere mid-stride, so start from the stance spot plus a clamped share of the current offset from it
     const F = this._fo, g = this.gait, ft = g.feet;
@@ -192,6 +193,7 @@ export class Character {
     this._transition(c.blend);
   }
   stopClip() {
+    this._sleep = false;
     if (this.clip || this._linger || this.ground) this._transition(0.16);
     this.clip = null; this.clipName = null; this.clipHold = false; this._linger = null; this.ground = null;
   }
@@ -206,13 +208,14 @@ export class Character {
     if (dir) { if (Array.isArray(dir)) { x = +dir[0] || 0; z = +dir[2] || 0; } else { x = +dir.x || 0; z = +dir.z || 0; } }
     const l = Math.hypot(x, z); if (l > 1e-6) { x /= l; z /= l; } else { x = 0; z = -1; }
     const s = clamp(+strength || 0, 0, 3), V = this.spr.v, r1 = Math.random() - 0.5, r2 = Math.random() - 0.5;
-    V[0] += z * 3.4 * s; V[2] -= x * 3.2 * s; V[1] += (x * 2.4 + r1 * 1.8) * s;   // chest rocks with the push, bends and twists away
-    V[3] += z * 4.6 * s * (0.75 + 0.5 * Math.random()); V[4] += (x * 2.6 + r2 * 1.2) * s; V[5] -= x * 3.6 * s;   // head whips
-    V[6] += z * 4.2 * s; V[8] += z * 4.2 * s;                                      // arms fling on inertia
-    V[7] -= (x * 3.6 - 1.2 * Math.random()) * s; V[9] -= (x * 3.6 + 1.2 * Math.random()) * s;
-    V[10] -= 2.6 * s; V[11] -= 2.6 * s; V[17] += r1 * 4 * s; V[18] += r2 * 4 * s;
-    V[12] += x * 0.7 * s; V[14] += z * 0.7 * s; V[13] -= 0.4 * s;                 // pelvis shoved, knees give
-    V[15] += z * 1.3 * s; V[16] -= x * 1.6 * s; V[23] += (x * 0.8 + r1) * s;
+    this._sleep = false;
+    V[0] += z * 1.9 * s; V[2] -= x * 1.8 * s; V[1] += (x * 1.5 + r1 * 1.1) * s;   // chest rocks with the push, bends and twists away
+    V[3] += z * 2.8 * s * (0.75 + 0.5 * Math.random()); V[4] += (x * 1.7 + r2 * 0.8) * s; V[5] -= x * 2.2 * s;   // head whips
+    V[6] += z * 2.6 * s; V[8] += z * 2.6 * s;                                      // arms fling on inertia
+    V[7] -= (x * 2.2 - 0.8 * Math.random()) * s; V[9] -= (x * 2.2 + 0.8 * Math.random()) * s;
+    V[10] -= 1.8 * s; V[11] -= 1.8 * s; V[17] += r1 * 3 * s; V[18] += r2 * 3 * s;
+    V[12] += x * 0.3 * s; V[14] += z * 0.3 * s; V[13] -= 0.25 * s;                // pelvis shoved, knees give
+    V[15] += z * 0.7 * s; V[16] -= x * 0.9 * s; V[23] += (x * 0.5 + r1 * 0.6) * s;
     if (this.ground) { V[19] += r1 * 3 * s; V[20] -= r2 * 3 * s; V[21] += 2 * s * Math.random(); V[22] += 2 * s * Math.random(); }
   }
 
@@ -233,7 +236,13 @@ export class Character {
     if (!(dt > 0)) { this.applyPose(this.cur); return ev; }
     if (dt > 0.1) dt = 0.1;
     this.time += dt;
-    if (this.override) return this._updateOverride(dt);
+    if (this.override) { this._sleep = false; return this._updateOverride(dt); }
+    // a body that has finished falling and settled on the floor keeps its pose without re-solving it every frame
+    if (this._sleep) { const M = this._m, r = this.root; M.px = r.position.x; M.pz = r.position.z; M.yaw = r.rotation.y; M.dtPrev = dt; return ev; }
+    if (this.ground && this.clip && this.clipDone && this.clipHold && this.clipT > this.clip.dur / this.clipSpeed + 2.5 && !this.override) {
+      let e = 0; const V = this.spr.v; for (let i = 0; i < V.length; i++) e += V[i] * V[i];
+      if (e < 1e-4 && this._lift === this._lift) { this._sleep = true; return ev; }
+    }
     const B = this.base, cur = this.cur, buf = cur.buf, g = this.gait;
     B.buf.fill(0);
     const inp = this._inp; this._measure(dt, inp);
@@ -346,8 +355,12 @@ export class Character {
       else { const it = 1 / Math.max(1e-3, M.dtPrev), s = Math.sin(yaw), c = Math.cos(yaw); mvx = (dx * c - dz * s) * it; mvz = (dx * s + dz * c) * it; w = dyw * it; }
     }
     M.px = px; M.pz = pz; M.yaw = yaw; M.init = true; M.dtPrev = dt;
-    const want = this.speed > 0 ? this.speed : 0;
-    if (want > 0.2 && (this.treadmill || Math.hypot(mvx, mvz) < 0.02)) { mvx = 0; mvz = want; }
+    const want = this.speed > 0 ? this.speed : 0, ms = Math.hypot(mvx, mvz);
+    if (want > 0.2 && (this.treadmill || ms < 0.02)) { mvx = 0; mvz = want; }
+    else if (want < 0.3 && ms > 1) {
+      // shoved / knocked back (moving without walking): the planted feet skid along part of the way while the stepper stumbles
+      const keep = 1 - Math.min(0.7, (ms - 1) / 4); mvx *= keep; mvz *= keep;
+    }
     inp.vx = mvx; inp.vz = mvz; inp.w = w; inp.intended = want; inp.tele = tele;
     if (tele) { this._hasOut = false; this.spr.reset(); this._srcOk = 0; }
   }
@@ -369,8 +382,9 @@ export class Character {
     if (this.style.eagle) {
       // Dredd: Lawgiver at low-ready, daystick hand riding by the belt, chest out
       const breath = Math.sin(t * 1.55 + this._seed);
-      B.shR[0] = lerp(-0.34, -0.62, rw) - sw * 0.09 * amp - 0.015 * breath * iw; B.shR[1] = 0.12 + 0.05 * rw; B.shR[2] = -0.12 - 0.05 * rw;
-      B.elR[0] = lerp(-0.92, -1.45, rw) + 0.04 * breath * iw;
+      const spw = g.sprintW;   // flat out, the gun arm pumps instead of being held out
+      B.shR[0] = lerp(-0.34, -0.62, rw) - sw * (0.09 + 0.45 * spw) * amp - 0.015 * breath * iw + 0.25 * spw; B.shR[1] = 0.12 + 0.05 * rw; B.shR[2] = -0.12 - 0.05 * rw;
+      B.elR[0] = lerp(-0.92, -1.45, rw) + 0.04 * breath * iw - 0.15 * spw;
       B.wrR[0] = 0.16; B.wrR[1] = 0; B.wrR[2] = 0.05;
       B.shL[0] = lerp(-0.06, -0.3, rw) + sw * lerp(0.3, 0.55, rw) * amp; B.shL[1] = -0.06; B.shL[2] = 0.17 + 0.03 * rw;
       B.elL[0] = lerp(-0.62, -1.5, rw) - Math.max(0, sw) * 0.3 * amp;
@@ -490,7 +504,7 @@ export class Character {
       m3EulerYXZ(_mF, buf[fto], buf[fto + 1], buf[fto + 2]);
       m3TMul(_mA, _mK, _mF);
       eulerXYZ(_mA, buf, ao);
-      buf[ao] = clamp(buf[ao], -0.8, 0.95); buf[ao + 1] = clamp(buf[ao + 1], -0.45, 0.45); buf[ao + 2] = clamp(buf[ao + 2], -0.32, 0.32);
+      buf[ao] = clamp(buf[ao], -0.8, 0.95); buf[ao + 1] = clamp(buf[ao + 1], -0.45, 0.45); buf[ao + 2] = clamp(buf[ao + 2], -0.44, 0.44);
       if (C && C.legFK[s] && w > 0) {
         const cb = this._cb, m = C.mask;
         for (let c = 0; c < 3; c++) {

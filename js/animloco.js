@@ -187,7 +187,7 @@ export class Gait {
     // much shorter, so there the cadence goes up first.
     let D = lerp(0.6, 0.38, runW) - 0.08 * sstep(1.45, 2.2, vh) - 0.06 * sprintW;
     const vr = this.spd / S, rel = wrapPi(mdir - this.gyaw), sideK = Math.abs(Math.sin(rel));
-    const sweep = lerp(1.15, 1.0, runW) * g.legLen / 0.935 * lerp(Math.cos(rel) < 0 ? 0.75 : 1, 0.45, sideK);
+    const sweep = lerp(1.15, 1.0, runW) * g.legLen / 0.935 * lerp(Math.cos(rel) < 0 ? 0.75 : 1, 0.36, sideK);
     if (vr * D / f > sweep) f = Math.min(f * 1.7, vr * D / sweep);
     if (vr * D / f > sweep) D = Math.max(0.17, sweep * f / vr);
     this.f = f; this.T = 1 / f; this.D = D;
@@ -370,7 +370,8 @@ export class Gait {
     const want = hy;
     const kk = lerp(0.002, 0.018, mw);   // soft zone below the limit: tiny standing (knees stay where the stance puts them), smoother moving
     if (hy > hmax - kk) hy = hmax - kk * Math.exp(-(hy - (hmax - kk)) / kk);
-    if (hy < want - 0.14) hy = want - 0.14;   // never squat into a split to keep a far foot planted (it steps instead)
+    const maxDrop = cyc ? 0.14 : 0.08;
+    if (hy < want - maxDrop) hy = want - maxDrop;   // never squat into a split to keep a far foot planted (it steps instead)
     this.hy = hy;
     B.pos[0] = px; B.pos[1] = hy - 1.0; B.pos[2] = pz;
     B.hips[0] = pitch; B.hips[1] = yaw; B.hips[2] = roll;
@@ -387,7 +388,7 @@ export class Gait {
     const tw = this.t;
     // spine: lean with speed / acceleration, counter-rotate the shoulders against the pelvis, undo the strafe yaw
     const twitch = P.twitch ? (wobble(tw * 7, this.seed + 3) * 0.06 + wobble(tw * 13, this.seed + 5) * 0.03) : 0;
-    B.torso[0] = (lerp(0.03, 0.16, runW) + 0.08 * sprintW) * mw + this.accP * 0.45 + P.hunch + iw * 0.012 * breath + twitch;
+    B.torso[0] = (lerp(0.03, 0.16, runW) + 0.14 * sprintW) * mw + this.accP * 0.45 + P.hunch + iw * 0.012 * breath + twitch;
     B.torso[1] = -this.gyaw * 0.45 * mw - st.turn * iw * 0.45;
     B.torso[2] = -roll * 0.35 + this.lean * 0.15;
     const counter = lerp(6.5, 11, runW) * DEG * Math.cos(TAU * ph) * amp * (1 + P.swagger * 0.5);

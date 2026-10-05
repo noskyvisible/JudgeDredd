@@ -7,12 +7,14 @@
 //     --pose idle                   idle | walk:<m/s> | run | aim | hipfire | ready | clip:<name>:<0..1> | frames:<name>:<n>  (n frames across a clip, as columns)
 //     --dir front|back|left|right   hit direction for directional clips (hurt / die / knockdown …): where the hit comes FROM
 //     --stance ready|panic          character stance while posing
+//     --look x,y,z                  head look-at target (world position; the character stands at the origin facing +Z)
+//     --aim                         aim the gun during --cycle / --seq
 //     --tile 300x420                size of every tile                                            [default 300x420]
 //     --zoom 1.0                    camera distance multiplier (<1 closer);  --focus 0.55  height (0 feet .. 1 head) the camera looks at
 //     --cycle walk:<m/s>:<n>        n frames across one walk/run cycle (columns), side view, on a treadmill (run:<m/s>:<n> works too)
 //     --seq <kind>:<m/s>:<n>:<sec>  n frames over <sec> seconds of a moving-root sequence, camera tracking from the side:
 //                                   start (idle -> moving), stop (moving -> idle), turn (180 at speed), strafe, shove (knockback), pivot (turn on the spot),
-//                                   dodge (the player's dodge roll)
+//                                   dodge (the player's dodge roll), combo (the player's daystick chain)
 //     --span <sec>                  for frames:<clip>:<n>: render this many seconds instead of the clip length (see the settle / hold)
 //     --then <clip>:<sec>           for frames: play a second clip <sec> seconds in (e.g. knockdown then getup)
 //     --url http://localhost:8000/  game server (python3 -m http.server)
@@ -42,6 +44,8 @@ const dirName = opt('dir', '');
 const stance = opt('stance', '');
 const span = +opt('span', '0');
 const then = opt('then', '');
+const look = opt('look', '');
+const aimArg = args.includes('--aim');
 const [TW, TH] = opt('tile', '300x420').split('x').map(Number);
 const zoom = +opt('zoom', '1'), focus = +opt('focus', '0.52');
 const url = opt('url', 'http://localhost:8000/');
@@ -55,7 +59,7 @@ await page.addInitScript(() => { window.__noRender = true; });
 await page.goto(url);
 await page.waitForFunction(() => window.__test, null, { timeout: 180000 });
 
-const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, TW, TH, zoom, focus }) => {
+const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, look, aimArg, TW, TH, zoom, focus }) => {
   const T = window.__test, THREE = T.THREE, R = T.renderer;
   const studio = new THREE.Scene();
   studio.background = new THREE.Color(0x15121d);
@@ -80,6 +84,8 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
     else if (style === 'gunman') { ch.gunMount.rotation.x = Math.PI / 2; ch.gunMount.add(T.makePistol()); }
     else if (style === 'thug' || style === 'brute' || style === 'boss') { ch.toolR.add(T.makeBat(0x6a4a2a, 0.9)); }
     if (stance) ch.stance = stance;
+    if (look) ch.lookAt(new THREE.Vector3(...look.split(',').map(Number)));
+    if (aimArg) { ch.aim = 1; ch.aimPitch = 0.04; }
     studio.add(ch.root);
     return ch;
   };
@@ -121,6 +127,16 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
       else if (kind === 'pivot') { want = 0; if (k > 0.15) yawTo = Math.PI * 0.75; }
       else if (kind === 'strafe') { want = v; side = true; }
       else if (kind === 'shove') { want = 0; if (S.t < dt * 1.5 && S.t >= 0) { S.vel.set(0, 0, -7); ch.impulse([0, 0, -1], 1.2); ch.play('hurt', { speed: 1.3, dir: new THREE.Vector3(0, 0, -1) }); } }
+      else if (kind === 'combo') {   // mirrors Player.startAttack chaining: next strike at 78% progress, short lunge with no target
+        const SEQ = [['slashR', 1.35], ['slashL', 1.35], ['kick', 1.3], ['thrust', 1.4], ['gunbutt', 1.35], ['overhead', 1.15]];
+        if (S.ci === undefined || (S.t >= 0.1 && (S.ci < 0 || ch.clipProgress() > 0.78))) {
+          S.ci = (S.ci ?? -2) + 1;
+          if (S.ci >= 0 && S.ci < SEQ.length) { ch.play(SEQ[S.ci][0], { speed: SEQ[S.ci][1] }); S.at = 0; }
+        }
+        S.at = (S.at ?? 9) + dt;
+        if (S.at < 0.25) S.vel.set(Math.sin(S.yaw) * 5, 0, Math.cos(S.yaw) * 5); else S.vel.multiplyScalar(Math.exp(-12 * dt));
+        ch.speed = 0; ch.update(dt); S.pos.addScaledVector(S.vel, dt); ch.root.position.copy(S.pos); S.t += dt; return;
+      }
       else if (kind === 'dodge') {   // mirrors Player.startDodge / the 'dodge' state
         if (S.dk === undefined && S.t >= 0.1) { S.dk = 0; ch.play('dodge', { speed: 1 }); }
         if (S.dk !== undefined && S.dk < 1) { S.dk = Math.min(1, S.dk + dt / 0.5); const sp = 15 * (1 - S.dk * 0.6); S.vel.set(Math.sin(S.yaw) * sp, 0, Math.cos(S.yaw) * sp); ch.roll = S.dk * Math.PI * 2; if (S.dk >= 1) { ch.roll = 0; ch.stopClip(); S.vel.set(0, 0, 0); } }
@@ -151,7 +167,7 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
         ang = angleGiven ? angDeg[angles[0]] ?? 90 : 90; aName = angleGiven ? angles[0] : 'side';
         tgt.set(ch.root.position.x, H * focus, ch.root.position.z);
       } else if (cyc) { // side view, n frames across a walk/run cycle
-        ch.root.position.set(0, 0, 0); ch.root.rotation.y = 0; ch.stopClip?.(); ch.aim = 0; ch.speed = +cyc[1]; ch.treadmill = true;
+        ch.root.position.set(0, 0, 0); ch.root.rotation.y = 0; ch.stopClip?.(); ch.aim = aimArg ? 1 : 0; ch.speed = +cyc[1]; ch.treadmill = true;
         if (c === 0) { ch.phase = 0; settle(ch, 90); }
         const period = ch.cyclePeriod ? ch.cyclePeriod() : (Math.PI * 2 / (1.8 * (ch.speed * 1.35)));
         if (c > 0) step(ch, period / cols);
@@ -179,7 +195,7 @@ const res = await page.evaluate(async ({ chars, angles, angleGiven, pose, cycle,
     studio.remove(ch.root);
   }
   return { png: sheet.toDataURL('image/png'), info };
-}, { chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, TW, TH, zoom, focus });
+}, { chars, angles, angleGiven, pose, cycle, seq, dirName, stance, span, then, look, aimArg, TW, TH, zoom, focus });
 fs.writeFileSync(out, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(res.info.join('\n'));
 console.log(errs.length ? 'ERRORS:\n' + errs.slice(0, 6).join('\n') : 'wrote ' + out);

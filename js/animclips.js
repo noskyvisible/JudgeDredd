@@ -201,7 +201,7 @@ const DEFS = {
   // directional hit reactions (additive, so they land on top of whatever the body is doing); 'hurt' picks one
   hurtF: { dur: 0.3, hit: 2, side: 'R', additive: true, out: 0.45, blend: 0.03, look: 0.3, frames: [
     [0.00, { hips: [0, 0, 0], torso: [0, 0, 0], chest: [0, 0, 0], head: [0, 0, 0], shL: [0, 0, 0], shR: [0, 0, 0], elL: [0], elR: [0], pos: [0, 0, 0] }],
-    [0.13, { hips: [-6, 0, 0], torso: [-20, 0, 0], chest: [-8, 0, 0], head: [-22, 0, 0], shL: [-28, 0, 14], shR: [-28, 0, -14], elL: [-20], elR: [-20], pos: [0, -0.04, -0.1] }, 1],
+    [0.13, { hips: [-5, 0, 0], torso: [-15, 0, 0], chest: [-6, 0, 0], head: [-16, 0, 0], shL: [-24, 0, 12], shR: [-24, 0, -12], elL: [-18], elR: [-18], pos: [0, -0.03, -0.07] }, 1],
     [0.45, { hips: [1, 0, 0], torso: [4, 0, 0], chest: [2, 0, 0], head: [6, 0, 0], shL: [6, 0, 0], shR: [6, 0, 0], elL: [-5], elR: [-5], pos: [0, -0.01, -0.03] }],
     [1.00, { hips: [0, 0, 0], torso: [0, 0, 0], chest: [0, 0, 0], head: [0, 0, 0], shL: [0, 0, 0], shR: [0, 0, 0], elL: [0], elR: [0], pos: [0, 0, 0] }],
   ] },
