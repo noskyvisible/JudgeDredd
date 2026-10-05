@@ -238,6 +238,12 @@ export const world = {
           vec3 glow = mix(vec3(0.16, 0.07, 0.2), vec3(0.95, 0.38, 0.34), below * below) * (0.35 + 0.65 * c1);
           c = mix(c, glow, cov1 * 0.85);
           c = mix(c, vec3(0.10, 0.06, 0.16) + vec3(0.35, 0.13, 0.2) * below, cov2 * 0.55);
+          // a pale smog-hazed moon with a wide halo (the clouds cover it), and a few faint stars in the clear gaps
+          vec3 moonDir = normalize(vec3(-0.42, 0.5, -0.76)); float md = dot(d, moonDir);
+          float cloudVeil = clamp(cov1 * 0.9 + cov2 * 0.5, 0.0, 1.0);
+          c += vec3(0.62, 0.7, 1.0) * (smoothstep(0.99935, 0.99965, md) * 1.6 + pow(max(md, 0.0), 260.0) * 0.55 + pow(max(md, 0.0), 24.0) * 0.07) * (1.0 - cloudVeil * 0.85) * step(0.0, y);
+          vec2 sg = floor(d.xz / (ay + 0.4) * 160.0); float sh = h(sg);
+          c += vec3(0.8, 0.85, 1.0) * step(0.9965, sh) * (0.5 + 0.5 * sin(time * 2.0 + sh * 60.0)) * smoothstep(0.35, 0.8, y) * (1.0 - cloudVeil) * 0.55;
           // lightning lights the cloud decks from within
           c += vec3(0.5, 0.55, 0.9) * flash * (0.2 + 1.3 * (cov1 + cov2 * 0.6) * (0.4 + c1));
           c *= 0.85 + 0.15 * step(0.0, y);
