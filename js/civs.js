@@ -20,8 +20,8 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
 export class Civilian {
   constructor(opts = {}) {
-    const pal = pick([0x6a3a3a, 0x3a6a4a, 0x4a4a7a, 0x7a6a3a, 0x5a3a6a, 0x3a5a6a, 0x8a5a2a]);
-    this.ch = new Character('civ', { armor: pal, under: pick([0x2a2a3a, 0x3a2a2a, 0x2a3a2a]), hair: pick([0x222222, 0x6a4a2a, 0xaa8a4a, 0x888888, 0xcc4444]), skin: pick([0xc09070, 0x8a5a3a, 0xe0b090, 0x6a4a30]) });
+    // every civilian gets a seeded look (outfit, body, face, hair, palette, height) from chargeneric.js
+    this.ch = new Character('civ', opts.look != null ? { variant: opts.look } : {});
     this.pos = new THREE.Vector3(); this.yaw = 0; this.state = 'walk'; this.stateT = 0; this.hp = 20; this.scale = this.ch.style.scale;
     this.removed = false; this.victim = !!opts.victim; this.dead = false; this.name = 'Citizen';
     this.cx = 0; this.cz = 0; this.p = 0; this.dir = 1; this.speed = rand(1.2, 1.9); this.panicDir = new THREE.Vector3();
