@@ -5,14 +5,18 @@ import { audio } from './audio.js';
 import { world, roadX, N } from './world.js';
 import { PathFollower } from './bike.js';
 import { rand, pick, chance, clamp, angDiff, dampAngle, segSphere, randInt } from './util.js';
-import { makeCarModel, CAR_KINDS } from './carmodel.js';
+import { makeCarModel, CAR_KINDS, isBig, carPaint, animateCar } from './carmodel.js';
+import { glowTex, shadowTex } from './vehicle_tex.js';
+import { LightGlints, WetStreaks } from './vehicle_fx.js';
 
-const COLS = [0x8a1a1a, 0x1a3a8a, 0xb0a020, 0x2a2a2e, 0xd0d0d8, 0x1a6a4a, 0x6a2a8a, 0xc06a1a];
+const NEONS = [0x20c0ff, 0xff30b0, 0x40ff90, 0xffa030, 0x9060ff, 0x2060ff];
 
 class Car {
   constructor(i) {
-    this.kind = pick(CAR_KINDS); this.truck = this.kind === 'truck';
-    this.model = makeCarModel(this.kind, pick(COLS));
+    this.kind = pick(CAR_KINDS); this.truck = isBig(this.kind);   // big vehicles (box truck, shuttle bus) use the truck collision size
+    this.model = makeCarModel(this.kind, carPaint(this.kind));
+    this.neon = this.kind !== 'police' && chance(0.35) ? new THREE.Color(pick(NEONS)) : null;   // underglow
+    this.lightsOn = this.kind === 'police' && chance(0.6);
     G.scene.add(this.model);
     this.steer = 0; this.prevYaw = 0; this.prevSpeed = 0; this.braking = false; this.pitch = 0; this.roll = 0;
     this.path = new PathFollower(); this.path.lane = 5.0 + rand(-0.4, 0.4);
@@ -74,7 +78,7 @@ class Car {
     G.civs?.panic(p, 40);
     G.player?.onCarDestroyed?.(this);
     const u = this.model.userData; u.paint.color.multiplyScalar(0.15); u.paint.clearcoat = 0; u.paint.roughness = 0.9; u.paint.metalness = 0.2;   // burnt-out shell
-    if (u.lampMesh) u.lampMesh.visible = false; u.tail.color.setRGB(0.02, 0, 0);
+    if (u.lampMesh) u.lampMesh.visible = false; u.tail.color.setRGB(0.02, 0, 0); if (u.lightbar) animateCar(this.model, 0, false);
     this.model.rotation.z = rand(-0.06, 0.06); this.model.userData.chassis.position.y = -0.04;
   }
   update(dt) {
@@ -82,7 +86,7 @@ class Car {
     const dp = Math.hypot(pl.pos.x - this.pos.x, pl.pos.z - this.pos.z);
     if (this.dead) {
       this.respawnT -= dt; fx.fire(this.pos.clone().setY(0.8), 1, 1.0);
-      if (this.respawnT < 0 && dp > 120) { const u = this.model.userData; u.paint.color.set(this.kind === 'taxi' ? 0xe2b21c : pick(COLS)); u.paint.clearcoat = 0.9; u.paint.roughness = 0.34; u.paint.metalness = 0.6; u.chassis.position.y = 0; this.model.rotation.z = 0; this.spawn(); }
+      if (this.respawnT < 0 && dp > 120) { const u = this.model.userData; u.paint.color.set(carPaint(this.kind)); u.paint.clearcoat = 1; u.paint.roughness = 0.32; u.paint.metalness = 0.55; u.chassis.position.y = 0; this.model.rotation.z = 0; this.spawn(); }
       return;
     }
     if (dp > 360) { // far away cars keep position but teleport near the player's neighbourhood occasionally
@@ -115,6 +119,7 @@ class Car {
     for (const f of u.front) f.rotation.y = this.steer;
     this.braking = target < this.speed - 0.6; const bk = this.braking ? 1 : 0;
     u.tail.color.setRGB(1.5 + bk * 3.2, 0.05 + bk * 0.3, 0.04 + bk * 0.2);
+    if (u.lightbar) animateCar(this.model, dt, this.lightsOn);
     this.prevYaw = this.yaw; this.prevSpeed = this.speed;
   }
   ahead(p, fx_, fz_, range, width) {
@@ -156,11 +161,45 @@ function makeBeams(max) {
   const m = new THREE.InstancedMesh(g, mat, max); m.frustumCulled = false; m.renderOrder = 5; m.count = 0; return m;
 }
 const _bm = new THREE.Matrix4(), _bq = new THREE.Quaternion(), _bp = new THREE.Vector3(), _bs = new THREE.Vector3(1, 1, 1), _be = new THREE.Euler();
+// neon underglow: one instanced additive ground decal for all cars (per-instance colour)
+function makePools(max) {
+  const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const m = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xffffff, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 }), max);
+  m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
+  m.frustumCulled = false; m.renderOrder = 4; m.count = 0; return m;
+}
+const _pc = new THREE.Color(), _lp = new THREE.Vector3(), _ld = new THREE.Vector3(), _lq = new THREE.Vector3();
+// soft contact shadows: one instanced dark decal under every visible car (grounds them at night when the sun casts little)
+function makeShadows(max) {
+  const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const m = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map: shadowTex(), color: 0x000000, transparent: true, opacity: 0.78, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }), max);
+  m.frustumCulled = false; m.renderOrder = 3; m.count = 0; return m;
+}
 
 let weaponsRef = null;
 export class Traffic {
   constructor() { this.cars = []; }
-  init(n = 34) { for (let i = 0; i < n; i++) this.cars.push(new Car(i)); this.beams = makeBeams(n); G.scene.add(this.beams); }
+  init(n = 34) { for (let i = 0; i < n; i++) this.cars.push(new Car(i)); this.beams = makeBeams(n); G.scene.add(this.beams); this.pools = makePools(n); G.scene.add(this.pools); this.shadows = makeShadows(n); G.scene.add(this.shadows); this.glints = new LightGlints(G.scene, n * 4); this.streaks = new WetStreaks(G.scene, n * 2); }
+  updatePools(pl) {
+    let k = 0;
+    for (const c of this.cars) {
+      if (!c.neon || c.dead || Math.hypot(c.pos.x - pl.pos.x, c.pos.z - pl.pos.z) > 110) continue;
+      const u = c.model.userData;
+      _bp.set(c.pos.x, 0.03, c.pos.z); _bq.setFromEuler(_be.set(0, c.yaw, 0)); _bs.set(u.wid * 1.5, 1, u.len * 1.15); _bm.compose(_bp, _bq, _bs);
+      this.pools.setMatrixAt(k, _bm); this.pools.setColorAt(k, _pc.copy(c.neon).multiplyScalar(0.55)); k++;
+    }
+    _bs.set(1, 1, 1);
+    let n = 0;
+    for (const c of this.cars) {
+      if (Math.hypot(c.pos.x - pl.pos.x, c.pos.z - pl.pos.z) > 140) continue;
+      const u = c.model.userData;
+      _bp.set(c.pos.x, 0.02, c.pos.z); _bq.setFromEuler(_be.set(0, c.yaw, 0)); _bs.set(u.wid * 1.25, 1, u.len * 1.12); _bm.compose(_bp, _bq, _bs);
+      this.shadows.setMatrixAt(n++, _bm);
+    }
+    _bs.set(1, 1, 1);
+    this.shadows.count = n; this.shadows.instanceMatrix.needsUpdate = true;
+    this.pools.count = k; this.pools.instanceMatrix.needsUpdate = true; if (this.pools.instanceColor) this.pools.instanceColor.needsUpdate = true;
+  }
   updateBeams(pl) {
     let k = 0; this.beams.material.uniforms.time.value = G.time;
     for (const c of this.cars) {
@@ -171,6 +210,37 @@ export class Traffic {
       _bq.setFromEuler(_be.set(0.05, c.yaw, 0, 'YXZ')); _bm.compose(_bp, _bq, _bs); this.beams.setMatrixAt(k++, _bm);
     }
     this.beams.count = k; this.beams.instanceMatrix.needsUpdate = true;
+  }
+  // lamp glare + wet-road reflections for nearby traffic (2 instanced draw calls)
+  updateLights() {
+    const cam = G.camera.position, G1 = this.glints, W = this.streaks;
+    G1.begin(); W.begin();
+    for (const c of this.cars) {
+      if (c.dead) continue;
+      const dx = c.pos.x - cam.x, dz = c.pos.z - cam.z; if (dx * dx + dz * dz > 150 * 150) continue;
+      const u = c.model.userData, lp = u.lamps; if (!lp) continue;
+      const fx_ = Math.sin(c.yaw), fz_ = Math.cos(c.yaw), rx = fz_, rz = -fx_;
+      const toCamF = -(dx * fx_ + dz * fz_);           // > 0: camera ahead of the car
+      const bk = c.braking ? 1 : 0;
+      for (const s of [-1, 1]) {
+        // headlights (white, facing forward)
+        let [x, y, z] = lp.head; _lp.set(c.pos.x + rx * x * s + fx_ * z, y, c.pos.z + rz * x * s + fz_ * z); _ld.set(fx_, -0.05, fz_);
+        G1.add(_lp, _ld, 2.2, 2.05, 1.8, 1.0, 0.68);
+        if (toCamF > 2 && s > 0) { _lq.set(c.pos.x + fx_ * z, y, c.pos.z + fz_ * z); W.add(_lq, cam, 1.4, 1.3, 1.1, 0.68, 1.5, 5.0); }
+        // tail lights (red, facing back; brighter when braking)
+        [x, y, z] = lp.tail; _lp.set(c.pos.x + rx * x * s + fx_ * z, y, c.pos.z + rz * x * s + fz_ * z); _ld.set(-fx_, 0, -fz_);
+        G1.add(_lp, _ld, 2.0, 0.12, 0.08, 0.5 + bk * 0.45, 0.32 + bk * 0.12);
+        if (toCamF < -2) W.add(_lp, cam, 1.6, 0.08, 0.05, 0.38 + bk * 0.4, 0.42, 3.2);
+      }
+      // police light bar flare (follows the strobe pattern animateCar writes)
+      const lb = u.lightbar;
+      if (lb && c.lightsOn) {
+        const kr = Math.max(0, (lb.red.color.r - 0.3) / 4), kb = Math.max(0, (lb.blue.color.b - 0.3) / 4), y = u.height + 0.12, z = -0.25;
+        if (kr > 0.02) { _lp.set(c.pos.x + rx * 0.3 + fx_ * z, y, c.pos.z + rz * 0.3 + fz_ * z); G1.add(_lp, _lq.subVectors(cam, _lp).normalize(), 2.6, 0.15, 0.1, kr, 1.1); }   // strobes shine all round
+        if (kb > 0.02) { _lp.set(c.pos.x - rx * 0.3 + fx_ * z, y, c.pos.z - rz * 0.3 + fz_ * z); G1.add(_lp, _lq.subVectors(cam, _lp).normalize(), 0.25, 0.5, 2.8, kb, 1.1); }
+      }
+    }
+    G1.end(); W.end();
   }
   hitTest(a, b) {
     let best = null;
@@ -192,7 +262,7 @@ export class Traffic {
   update(dt) {
     const pl = G.player;
     for (const c of this.cars) c.update(dt);
-    this.updateBeams(pl);
+    this.updateBeams(pl); this.updatePools(pl); this.updateLights();
     // collisions with the active bike / pursuit bikes / player on foot
     const bikes = [];
     if (G.mode === 'bike' && G.bikeObj) bikes.push(G.bikeObj);
